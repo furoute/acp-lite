@@ -294,7 +294,15 @@ python acp.py ... digest
 
 - ✅ **同机能做：同一台机器上的两个 agent，可以用 CLI 互相唤醒。**
   例：`dsh --profile headless "<提示词>"`、`codex exec "<提示词>"`（实测可用）。
-  但规矩是：**唤醒只递 `msg_id` 指针，正文仍让对方自己去信箱读**——
+  规矩是：**唤醒只递"指针"（收信文件的绝对路径，里面才有 msg_id），正文仍让对方自己去信箱读**——
   **ACP 是账本，CLI 是门铃；门铃不能替代账本**（验签、审计链、去重幂等、跨机统一，这些 CLI 都不管）。
+
+  ```bash
+  # 同机唤醒：一条命令，只递指针；正文留在信箱里，对方读完自己回一封
+  DSH_PERMISSION_MODE=danger-full-access dsh --profile headless "读 <收信文件的绝对路径> 并按信执行"
+  ```
+
+  > Windows PowerShell 里先 `$env:DSH_PERMISSION_MODE='danger-full-access'` 再执行同一行（少了这个变量，headless 会话起不来）；
+  > 反向叫醒 Codex 同理：`codex exec --skip-git-repo-check --ephemeral "读 <收信文件的绝对路径> 并按信执行"`。
 
 - ⚠️ 一句话总结：**本项目解决"消息怎么可靠地到"，不解决"对方怎么被叫醒"。**
