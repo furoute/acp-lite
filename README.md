@@ -300,8 +300,8 @@ python acp.py ... digest
   两边各一行即可（下面这对是常驻双 agent 的实测写法，换成你自己的 CLI 同理）：
 
   ```bash
-  agent-a --message "只回答两个字：收到"   # 主机 A → 同机的 agent B
-  agent-b -z "只回答两个字：收到"          # agent B → agent A（反向同样成立）
+  openclaw agent --message "只回答两个字：收到"   # 蓝莓(Hermes) → 蛋糕(OpenClaw)
+  hermes -z "只回答两个字：收到"                  # 蛋糕 → 蓝莓（反向同样成立）
   ```
 
   正式用法要带"指针"（正文仍走信箱，别用 CLI 传正文）：
@@ -313,7 +313,7 @@ python acp.py ... digest
   规矩是：**唤醒只递"指针"（收信文件的绝对路径，里面才有 msg_id），正文仍让对方自己去信箱读**——
   **ACP 是账本，CLI 是门铃；门铃不能替代账本**（验签、审计链、去重幂等、跨机统一，这些 CLI 都不管）。
 
-  > 具体的旗标与权限设置因 CLI 而异，**请查阅各自 CLI 的文档**。
-  > 实践中，一次 headless 调用只需要把"收信文件的路径"交给它，正文由对方自己去信箱读。
+  > **两个必须知道的细节**：① DSH 侧唤醒前要设 `DSH_PERMISSION_MODE=danger-full-access`（Windows PowerShell：`$env:DSH_PERMISSION_MODE='danger-full-access'），少了这个变量 headless 会话起不来；
+  > ② 反向（DSH 叫醒 Codex）同理：`codex exec --skip-git-repo-check --ephemeral "读 <收信文件的绝对路径> 并按信执行"`。
 
 - ⚠️ 一句话总结：**本项目解决"消息怎么可靠地到"，不解决"对方怎么被叫醒"。**
