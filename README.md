@@ -1,12 +1,14 @@
 # ACP-lite (Agent Connect Personal)
 
+[English](README-EN.md) | **简体中文**
+
 跨主机 Agent 互联的**最小实现**：一台机器一个"邮局"，Agent 仍然只读写本地文件。
 
 ![ACP-lite 六智能体舰队拓扑](assets/acp-lite-topology.png)
 
 > 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 目标很朴素——让两台 NAT 后的普通电脑上的 Agent 能说上话，不经过任何厂商。
-> 顺带一提：图里的 **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)** 三个代号，是**我女儿起的**。😄
+> 图中是一个示例舰队：两台主机、每台两个 agent，换成你自己的名字即可。
 >
 > **不混淆声明**：本项目与 Zed 的 *Agent Client Protocol*、OpenAI+Stripe 的
 > *Agentic Commerce Protocol*、IBM 已归档的 *Agent Communication Protocol*
@@ -297,8 +299,8 @@ python acp.py ... digest
   两边各一行即可（下面这对是常驻双 agent 的实测写法，换成你自己的 CLI 同理）：
 
   ```bash
-  openclaw agent --message "只回答两个字：收到"   # 蓝莓(Hermes) → 蛋糕(OpenClaw)
-  hermes -z "只回答两个字：收到"                  # 蛋糕 → 蓝莓（反向同样成立）
+  agent-a --message "只回答两个字：收到"   # 主机 A → 同机的 agent B
+  agent-b -z "只回答两个字：收到"          # agent B → agent A（反向同样成立）
   ```
 
   正式用法要带"指针"（正文仍走信箱，别用 CLI 传正文）：
@@ -310,7 +312,7 @@ python acp.py ... digest
   规矩是：**唤醒只递"指针"（收信文件的绝对路径，里面才有 msg_id），正文仍让对方自己去信箱读**——
   **ACP 是账本，CLI 是门铃；门铃不能替代账本**（验签、审计链、去重幂等、跨机统一，这些 CLI 都不管）。
 
-  > **两个必须知道的细节**：① DSH 侧唤醒前要设 `DSH_PERMISSION_MODE=danger-full-access`（Windows PowerShell：`$env:DSH_PERMISSION_MODE='danger-full-access'`），少了这个变量 headless 会话起不来；
-  > ② 反向（DSH 叫醒 Codex）同理：`codex exec --skip-git-repo-check --ephemeral "读 <收信文件的绝对路径> 并按信执行"`。
+  > 具体的旗标与权限设置因 CLI 而异，**请查阅各自 CLI 的文档**。
+  > 实践中，一次 headless 调用只需要把"收信文件的路径"交给它，正文由对方自己去信箱读。
 
 - ⚠️ 一句话总结：**本项目解决"消息怎么可靠地到"，不解决"对方怎么被叫醒"。**
