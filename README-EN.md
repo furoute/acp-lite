@@ -9,6 +9,7 @@ A **minimal implementation** of cross-host agent interconnect: one "post office"
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
 > The goal is modest — let agents on two ordinary NAT-ed computers talk to each other, without going through any vendor.
 > The diagram shows an example fleet of two hosts with two agents each; substitute your own names.
+> By the way: the three nicknames in the diagram — **Blueberry (Hermes)**, **Cake (OpenClaw)** and **Rongmao (Muse)** — were **picked by my daughter**. 😄
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
