@@ -4,8 +4,9 @@
 
 ![ACP-lite 六智能体舰队拓扑](assets/acp-lite-topology.png)
 
-> 命名：**ACP-lite = Agent Connect Personal**。最后一个 P 也可以读作 **Peace**。
+> 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 目标很朴素——让两台 NAT 后的普通电脑上的 Agent 能说上话，不经过任何厂商。
+> 顺带一提：图里的 **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)** 三个代号，是**我女儿起的**。😄
 >
 > **不混淆声明**：本项目与 Zed 的 *Agent Client Protocol*、OpenAI+Stripe 的
 > *Agentic Commerce Protocol*、IBM 已归档的 *Agent Communication Protocol*
