@@ -313,7 +313,7 @@ python acp.py ... digest
   规矩是：**唤醒只递"指针"（收信文件的绝对路径，里面才有 msg_id），正文仍让对方自己去信箱读**——
   **ACP 是账本，CLI 是门铃；门铃不能替代账本**（验签、审计链、去重幂等、跨机统一，这些 CLI 都不管）。
 
-  > **两个必须知道的细节**：① DSH 侧唤醒前要设 `DSH_PERMISSION_MODE=danger-full-access`（Windows PowerShell：`$env:DSH_PERMISSION_MODE='danger-full-access'），少了这个变量 headless 会话起不来；
+  > **两个必须知道的细节**：① DSH 侧唤醒前要设 `DSH_PERMISSION_MODE=danger-full-access`（Windows PowerShell：`$env:DSH_PERMISSION_MODE='danger-full-access'`），少了这个变量 headless 会话起不来；
   > ② 反向（DSH 叫醒 Codex）同理：`codex exec --skip-git-repo-check --ephemeral "读 <收信文件的绝对路径> 并按信执行"`。
 
 - ⚠️ 一句话总结：**本项目解决"消息怎么可靠地到"，不解决"对方怎么被叫醒"。**
