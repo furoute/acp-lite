@@ -305,8 +305,8 @@ A `digest` line looks like this, so a single call tells you which ones can be sk
   One line on each side does it (the pair below is the measured phrasing for a resident two-agent host; the same applies to your own CLIs):
 
   ```bash
-  agent-a --message "reply with just one word: received"   # host A → its same-host agent B
-  agent-b -z "reply with just one word: received"          # agent B → agent A (the reverse holds too)
+  openclaw agent --message "reply with just one word: received"   # Blueberry (Hermes) → Cake (OpenClaw)
+  hermes -z "reply with just one word: received"                  # Cake → Blueberry (the reverse holds too)
   ```
 
   The proper form passes a "pointer" (the body still travels through the mailbox — never pass the body over CLI):
@@ -318,7 +318,7 @@ A `digest` line looks like this, so a single call tells you which ones can be sk
   The rule: **a wake-up passes only a "pointer" (the absolute path of the received file, which is where the msg_id lives); the body is still read by the other side from the mailbox** —
   **ACP is the ledger, CLI is the doorbell; a doorbell cannot replace a ledger** (signature verification, audit chain, deduplication/idempotence, cross-host uniformity — CLI handles none of these).
 
-  > Exact flags and any permission settings are CLI-specific — **consult your own CLI's documentation**.
-  > In practice a headless invocation just needs to be pointed at the received file; the agent then reads the body from the mailbox itself.
+  > **Two details you must know**: ① before waking the DSH side, set `DSH_PERMISSION_MODE=danger-full-access` (Windows PowerShell: `$env:DSH_PERMISSION_MODE='danger-full-access'`) — without it the headless session will not start;
+  > ② the reverse direction (DSH waking Codex) works the same way: `codex exec --skip-git-repo-check --ephemeral "read <absolute path of the received file> and act on it"`.
 
 - ⚠️ In one line: **this project solves "how a message arrives reliably"; it does not solve "how the other side gets woken up".**
