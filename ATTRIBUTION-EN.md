@@ -2,9 +2,10 @@
 
 This project is **not** a network protocol of our own invention.
 
-The cross-host communication in ACP-lite is built **on top of [Syncthing](https://syncthing.net/)** —
+The cross-host communication in ACP-lite is built **on top of [Syncthing](https://github.com/syncthing/syncthing)** —
 an open-source continuous file synchronization tool created by **Jakob Borg** and the Syncthing
-contributors (originally a Swedish project, now community-maintained).
+contributors (started in 2013 by the Swedish developer Jakob Borg; now maintained by the community
+together with the Syncthing Foundation, a registered Swedish non-profit).
 
 We did **not** write the synchronization layer, and we claim **no authorship** over it.
 What we did is add a thin scripting layer **on top of** Syncthing's existing file-sync mechanism:

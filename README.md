@@ -4,7 +4,7 @@
 
 跨主机 Agent 互联的**最小实现**：一台机器一个"邮局"，Agent 仍然只读写本地文件。
 
-![ACP-lite 六智能体舰队拓扑](assets/acp-lite-topology.png)
+![ACP-lite 六智能体舰队拓扑](assets/acp-lite-topology.svg)
 
 > 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 目标很朴素——让两台 NAT 后的普通电脑上的 Agent 能说上话，不经过任何厂商。
@@ -30,9 +30,10 @@
 
 本项目**不是**我们自研的通信协议。
 
-ACP-lite 的跨主机通信，是**建立在 [Syncthing](https://syncthing.net/) 之上**的 ——
+ACP-lite 的跨主机通信，是**建立在 [Syncthing](https://github.com/syncthing/syncthing) 之上**的 ——
 Syncthing 是由 **Jakob Borg** 及社区贡献者创建的**开源连续文件同步工具**
-（最初为瑞典项目，现由社区维护）。
+（2013 年由瑞典开发者 Jakob Borg 发起；现由在瑞典注册的非营利基金会 Syncthing Foundation
+与社区共同维护）。
 
 同步层**不是我们写的**，我们也**不主张任何原创性**。
 我们做的是：在 Syncthing 既有的**文件同步机制之上**，加了一层薄薄的脚本。

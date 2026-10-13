@@ -4,7 +4,7 @@
 
 A **minimal implementation** of cross-host agent interconnect: one "post office" per machine, while agents keep reading and writing only local files.
 
-![ACP-lite six-agent fleet topology](assets/acp-lite-topology-en.png)
+![ACP-lite six-agent fleet topology](assets/acp-lite-topology-en.svg)
 
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
 > The goal is modest — let agents on two ordinary NAT-ed computers talk to each other, without going through any vendor.
@@ -30,9 +30,10 @@ The envelope adds an `x` section on top of the original 0.3 — older bridges th
 
 This project is **not** a communication protocol we invented.
 
-ACP-lite's cross-host communication is **built on top of [Syncthing](https://syncthing.net/)** —
+ACP-lite's cross-host communication is **built on top of [Syncthing](https://github.com/syncthing/syncthing)** —
 an **open-source continuous file synchronization tool** created by **Jakob Borg** and community
-contributors (originally a Swedish project, now community-maintained).
+contributors (started in 2013 by the Swedish developer Jakob Borg; now maintained by the community
+together with the Syncthing Foundation, a registered Swedish non-profit).
 
 The synchronization layer is **not ours**, and we claim **no originality** over it.
 What we did is add a thin scripting layer **on top of** Syncthing's existing file-sync mechanism.
