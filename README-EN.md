@@ -22,8 +22,8 @@ A **minimal implementation** of cross-host agent interconnect: one "post office"
 Today the agents **on the same machine** can already talk to each other (an on-host file channel), but **the gap between two machines** remains.
 
 This program does exactly one thing: **make the mailboxes on two machines become "the same mailbox"** — everything else stays as it was.
-Protocol version = program version = **0.6.2** (the two currently share a single `VERSION` constant in `acp.py`;
-splitting them is planned for v0.7; the envelope format is defined by `ENVELOPE-FORMAT.md`).
+Protocol version = program version = **0.7.0** (the two currently share a single `VERSION` constant in `acp.py`;
+the envelope format is defined by `ENVELOPE-FORMAT.md`).
 The envelope adds an `x` section on top of the original 0.3 — older bridges that don't know it are unaffected.
 
 ## 2. Dependency & attribution notice
@@ -144,7 +144,7 @@ On top of the original v0.3 fields, an `x` section is added (older bridges that 
 
 ```json
 {
-  "version": "0.6.2",
+  "version": "0.7.0",
   "id": "codex-20261005-193000-a1b2",
   "from": "codex", "to": "dsh", "type": "task",
   "payload": { "action": "infer", "data": "body text", "timeout": 1800 },
@@ -296,11 +296,16 @@ A `digest` line looks like this, so a single call tells you which ones can be sk
   Sync the same directory (`acp-shared`) to several machines with Syncthing, and an agent writes a signed letter into `outbox/<self>/`.
   The peer receives it, verifies the signature and appends to its audit chain by itself — this part **costs no model tokens at all**.
 
-- ❌ **It cannot: call the peer's agent directly over CLI across hosts.**
-  This project contains **no** cross-host wake-up channel (no SSH, no private tunnel, no web service).
-  Across hosts you can only rely on "shared directory + a resident `watch` on the peer":
-  if the peer is off, or has no `watch` running, your letter simply queues in the mailbox — **nobody will go and wake it up for you**.
-  To get "send it and someone starts working", you need an extra wake-up channel (SSH / Tailscale and the like), **which is out of scope for this project**.
+- ⚠️ **It can: ring the peer's doorbell across hosts over SSH — if that peer runs an OpenSSH server** (updated 2026-10-15;
+  the earlier wording "this project contains no cross-host wake-up channel" is outdated). This project still ships **no**
+  wake-up channel of its own (`watch` never calls a model), and it does **not** call the peer's agent for you — but the SSH
+  doorbell has been verified end-to-end 5 times on 2026-10-14/15 (screen off; after a reboot; ACP + SSH two paths in one boot).
+  The rule is **ACP is the ledger, SSH is the doorbell**: a wake-up passes only a "pointer" (the absolute path of the received
+  letter), and the peer's own session then reads the body from its mailbox, works, writes to disk and sends a signed receipt.
+  Install steps and the exact commands (Codex / DSH, and the same-host CLI pair) are in [README.md](README.md) §1
+  "可选：跨机唤醒通道（SSH 服务端）"; the 8 pitfalls we actually hit are the FAQ in §4 (English translation pending).
+  What is *not* solved: if the peer is off, or has no `watch` running, your letter simply queues in the mailbox — **nobody
+  will go and wake it up for you**, and a wake-up that returns `exit 0` has not necessarily done the work.
 
 - ✅ **Same host: two agents on one machine can wake each other over CLI (both directions).**
   One line on each side does it (the pair below is the measured phrasing for a resident two-agent host; the same applies to your own CLIs):

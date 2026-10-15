@@ -52,7 +52,7 @@ except Exception:  # noqa: BLE001
     HAVE_CRYPTO = False
 
 NAME = "ACP-lite (Agent Connect Personal)"
-VERSION = "0.6.2"  # 0.6.2 = 省 token：信封里带"要不要回"标签 + digest 一次看完
+VERSION = "0.7.0"  # 0.7.0 = 跨主机 SSH 唤醒里程碑（信封字段与 0.6.2 相同，不改协议格式）
 MAX_HOPS = 4
 REQUIRES = ("none", "read", "write", "send", "pay", "delete")
 GATED = ("write", "send", "pay", "delete")  # 必须有人签发放行票的出口动作

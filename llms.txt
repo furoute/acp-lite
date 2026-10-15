@@ -8,7 +8,8 @@
 - Each machine runs Syncthing; agents share one synced directory that behaves like a single mailbox. Everything else (local file-channel habits) stays unchanged.
 - Every message is an ed25519-signed JSON envelope with a hash-chained audit trail (`audit.jsonl`). Tampered bodies fail signature verification (`bad-signature`).
 - Built-in safety: outbox gate with STOP brake, reply-wanted tagging (`x.reply`) and digest mode to save tokens. The always-on watcher (`watch`) consumes zero LLM tokens.
-- Protocol version = program version = 0.6.2. Single-file Python implementation (`acp.py`), dependency: `cryptography` (pip install).
+- Protocol version = program version = 0.7.0. Single-file Python implementation (`acp.py`), dependency: `cryptography` (pip install).
+- Cross-host wake-up is NOT built in (`watch` never calls a model) — but a tested SSH "doorbell" recipe is documented: the wake-up carries only a pointer (the path of the received letter); ACP still carries the body, the signature and the audit trail. Verified end-to-end 5 times on 2026-10-14/15 (see README.md §1, FAQ in §4).
 - Tested in production-like use with Claude Code, Codex, DeepSeek Harness (DSH), Hermes and OpenClaw agents across 3 machines.
 
 ## What it is NOT (disambiguation)
