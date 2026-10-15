@@ -2,106 +2,116 @@
 
 **English** | [简体中文](README.md)
 
-A **minimal implementation** of cross-host agent interconnect: one "post office" per machine, while agents keep reading and writing only local files.
+A **minimal implementation** of cross-host agent interconnect: one "post office" per machine, while agents still only read and write local files.
+Two ordinary computers behind NAT — no public IP, no server.
 
 ![ACP-lite six-agent fleet topology](assets/acp-lite-topology-en.svg)
 
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
-> The goal is modest — let agents on two ordinary NAT-ed computers talk to each other, without going through any vendor.
-> The diagram shows an example fleet of two hosts with two agents each; substitute your own names.
-> By the way: the three nicknames in the diagram — **Blueberry (Hermes)**, **Cake (OpenClaw)** and **Rongmao (Muse)** — were **picked by my daughter**. 😄
+> The diagram is an example fleet (two hosts, two agents each) — substitute your own names; the three
+> nicknames in it, **Blueberry (Hermes)**, **Cake (OpenClaw)** and **Rongmao (Muse)**, were **picked by my daughter**. 😄
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
 > When citing it, please use the full name "ACP-lite (Agent Connect Personal)".
 
----
+**How to read this**: it is an operating manual — the commands are meant to be copied as they are; `<home-dir>` / `<shared-dir>` / `<agent>` / `<peer-agent>` are placeholders.
+Setup is §1, the command cheat sheet is §2, and **when something breaks, look at §4 first (those 8 FAQs are pitfalls we really hit)**.
+The design rationale / comparison table / attribution / boundaries are §6 – §10 (for people who want to know *why*; skip them if you just want to use it).
+Program version = protocol version = **0.7.0**; the envelope format is defined by `ENVELOPE-FORMAT.md`.
 
-## 1. What problem it solves
-
-Today the agents **on the same machine** can already talk to each other (an on-host file channel), but **the gap between two machines** remains.
-
-This program does exactly one thing: **make the mailboxes on two machines become "the same mailbox"** — everything else stays as it was.
-Protocol version = program version = **0.7.0** (the two currently share a single `VERSION` constant in `acp.py`;
-the envelope format is defined by `ENVELOPE-FORMAT.md`).
-The envelope adds an `x` section on top of the original 0.3 — older bridges that don't know it are unaffected.
-
-## 2. Dependency & attribution notice
-
-This project is **not** a communication protocol we invented.
-
-ACP-lite's cross-host communication is **built on top of [Syncthing](https://github.com/syncthing/syncthing)** —
-an **open-source continuous file synchronization tool** created by **Jakob Borg** and community
-contributors (started in 2013 by the Swedish developer Jakob Borg; now maintained by the community
-together with the Syncthing Foundation, a registered Swedish non-profit).
-
-The synchronization layer is **not ours**, and we claim **no originality** over it.
-What we did is add a thin scripting layer **on top of** Syncthing's existing file-sync mechanism.
-
-- each host runs Syncthing and the agents share a single synced folder;
-- two hosts become connected by **mutually adding each other's Device ID**;
-- from then on, files written into that folder appear on the other host automatically.
-
-Multi-agent collaboration here therefore **borrows Syncthing's existing mechanism**; it is not our invention.
-Our thanks go to the Syncthing project and its maintainers.
-
-ACP-lite itself is released under the **MIT License** (see `LICENSE`).
-
-> The English text of this section also appears in [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md).
-
-## 3. The five iron rules
-
-1. **On-host behaviour is unchanged** — the original ACP-lite file channel stays as it is; this program neither reads nor writes `mailbox/`.
-2. **Cross-host shares exactly one directory** — Syncthing / Tailscale / cloud drive / a USB stick can all serve as the transport.
-3. **Private keys never enter the shared directory** — `--home` is host-private; the shared directory holds only name cards and outboxes.
-4. **Receiving never calls a model** — `watch` only writes to disk and appends to the audit log; idling costs no tokens. Whether to spend tokens is decided by a human or a scheduled job.
-5. **Missing dependency means refuse-to-receive (fail-closed)** — without `cryptography` on the host, cross-host messages are **rejected by default**.
-   To receive anyway you must pass `--allow-unsigned` explicitly (self-test scenarios only); such messages are marked `unverified` and **never enter `ready`**.
-   (The first version accepted everything here, which amounted to a silent trust bypass; three reviews **unanimously** asked for it to be fixed.)
-
-## 4. Quick start (do this once on each of two machines)
+## 1. Install and initialize (do this once on each machine)
 
 ```bash
-# 0. Install the dependency on both machines: pip install cryptography
-#    It runs without it, but falls into "unsigned mode" — cross-host messages are rejected outright
-#    (i.e. cross-host is unusable; see iron rule 5)
-#
-# 1. Install Syncthing (open source, no account, no central cloud) and add each other's Device ID
-#    The synced directory can be anywhere; below we use the placeholders <shared-dir> / <home-dir>
-#    Put the repo's .stignore into that directory (it blocks *.tmp and conflict copies)
+# 1. Python dependency. It starts without it, but cross-host messages are then rejected
+#    outright (fail-closed, see iron rule 5) → treat it as required for any real deployment
+pip install cryptography
 
-# 2. Initialize identity (--home is host-private; --root is the directory Syncthing syncs)
-python acp.py --home <home-dir> --root <shared-dir> init --agent codex --display "Codex@desktop"
+# 2. Install Syncthing (open source, no account, no central cloud): the two machines add
+#    each other's Device ID. Pick any synced directory (called <shared-dir> below) and put
+#    the repo's .stignore at its root
 
-# 3. Verify fingerprints out-of-band (this step must NOT go over the network)
-python acp.py --home <home-dir> --root <shared-dir> status      # prints this host's fingerprint
-python acp.py --home <home-dir> --root <shared-dir> trust --agent dsh --fingerprint xxxx-xxxx-xxxx-xxxx
+# 3. Initialize the identity. --home is this host's private directory (it holds the private
+#    key and must NEVER go into the synced directory); --root is the directory Syncthing syncs
+python acp.py --home <home-dir> --root <shared-dir> init --agent <agent> --display "Codex@desktop"
 
-# 4. Run the resident delivery loop (never calls a model; idling is free)
+# 4. Verify the fingerprint out-of-band (it MUST be out-of-band: in person or by voice, never over the network)
+python acp.py --home <home-dir> --root <shared-dir> status     # prints this host's fingerprint
+python acp.py --home <home-dir> --root <shared-dir> trust --agent <peer-agent> --fingerprint xxxx-xxxx-xxxx-xxxx
+
+# 5. Resident delivery (moves files only, never calls a model; idling burns no tokens)
 python acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
-
-# 5. Send one message / read the inbox
-python acp.py --home <home-dir> --root <shared-dir> send --to dsh --text "hello"
-python acp.py --home <home-dir> --root <shared-dir> inbox
 ```
 
 Replace the placeholders per platform: on Windows, e.g. `--home D:\acp-home --root D:\acp-shared`;
-on Linux / macOS, e.g. `--home ~/acp-home --root ~/acp-shared`.
+on Linux / macOS, e.g. `--home ~/acp-home --root ~/acp-shared`. Three rules you must keep:
 
-> **Note (repo vs. Windows one-click scripts)**: this repository ships only the **cross-platform core program and the bare command chain**.
-> The commands above work as-is on Windows / Linux / macOS.
-> Internally we also have a set of **Windows double-click scripts** (`0-init.cmd` → `1-syncthing.cmd` → `2-watch.cmd` → `9-selftest.cmd`,
-> plus `9-autostart.cmd` for autostart). They merely wrap the steps above and are **not part of this repository**;
-> if you want the convenience, write your own `.cmd` around the commands above — behaviour is identical.
+- **Never omit `--root`**: without it the default is `<home>/shared` — **exit code 0, and it looks like it worked**, while the letter actually lands in this host's private directory (FAQ 3).
+- **Agent names must be unique across machines**: the two machines cannot both be called `codex` (they would overwrite each other's name card and crowd into the same outbox).
+- **Put `.stignore` at the root of the synced directory**: it keeps out `~syncthing~*` / `*.tmp` and the conflict copies `*.sync-conflict-*` (those also end in `.json`, and without the rule they get scanned as if they were letters).
 
-Before taking work, an agent asks "what am I allowed to do":
+### Optional: a cross-host wake-up channel (an OpenSSH server)
 
-```bash
-python acp.py ... ready      # lists only what is genuinely executable (subject to STOP and release tickets)
-python acp.py ... ack <id>   # confirm it is done (consumes the release ticket)
+This project **ships no** wake-up channel of its own (`watch` never calls a model), but **a direct SSH wake-up has been verified working** (2026-10-14 / 10-15; 5 closed loops, all passed).
+The machine to be woken only needs an OpenSSH server, with port 22 opened to the local subnet alone:
+
+```powershell
+# Windows (administrator required)
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Set-Service sshd -StartupType Automatic; Start-Service sshd
+New-NetFirewallRule -Name OpenSSH-Server-In-TCP-LAN -DisplayName 'OpenSSH Server (LAN only)' `
+  -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -RemoteAddress 192.168.0.0/24
 ```
 
-## 5. The outbound gate (the heart of the security model)
+```bash
+# Linux / macOS
+sudo apt install openssh-server        # macOS ships OpenSSH
+```
+
+Wake-up commands (the prompt goes **through a file + stdin**, so neither Chinese text nor special characters get mangled by the shell):
+
+```cmd
+rem Wake Codex (the sandbox level must make the target directories writable — see FAQ 7)
+codex exec -s workspace-write --skip-git-repo-check -C D:\_wake ^
+  --add-dir D:\SharedFiles --add-dir D:\ACP-Shared --add-dir D:\LLM\ACP-lite\home ^
+  - < prompt.txt
+```
+
+```cmd
+rem Wake DSH (the level environment variable must live in the same process as dsh — see FAQ 5)
+set "DSH_PERMISSION_MODE=danger-full-access"
+cd /d D:\LLM\ACP-lite\_dsh-wake
+dsh --profile headless - < prompt.txt
+```
+
+```bash
+# Two agents on the same host can also call each other over CLI, in both directions
+# (substitute your own CLIs — the same holds)
+openclaw agent --message "reply with just one word: received"   # Blueberry (Hermes) → Cake (OpenClaw)
+hermes -z "reply with just one word: received"                  # Cake → Blueberry (the reverse holds too)
+```
+
+A wake-up carries only a "**pointer**" (the absolute path of the received letter, which is where `msg_id` lives); the body is still read by the other side from its own mailbox —
+**ACP is the ledger, the CLI is the doorbell; a doorbell cannot replace a ledger**. And **do not judge by the exit code**: `exit 0` may mean "it really did the work" or merely "it said something" — the criteria are **an artifact on disk + a longer audit chain + a signed receipt**.
+
+## 2. Command cheat sheet
+
+Every command below takes `--home <home-dir> --root <shared-dir>` (written as `acp.py ...` for brevity).
+
+| Command | What it does |
+|---|---|
+| `acp.py ... status` | identity / trust / inbox / brake status; prints this host's fingerprint |
+| `acp.py ... send --to <peer-agent> --text "..."` | deliver one message; `--to '*'` = broadcast; `--reply none` = no reply needed (default `auto`) |
+| `acp.py ... send --reply-to <msg_id> ...` | reply (auto `hops+1`) |
+| `acp.py ... inbox` | list the inbox |
+| `acp.py ... ready` | list only what is **genuinely executable** (subject to STOP and release tickets) |
+| `acp.py ... digest` | condense the pending messages into one screen — **the token-saving way to receive** |
+| `acp.py ... ack <msg_id>` | confirm it is handled (consumes the release ticket) |
+| `acp.py ... watch --loop --interval 3` | resident delivery (never calls a model) |
+| `acp.py ... audit` | verify and inspect the hash-chained audit log |
+| `python selftest.py` | run the entire offline self-test (gate / brake / forged release ticket / bad-message isolation); no network needed |
+
+## 3. The outbound gate (the heart of the security model)
 
 | Action `--requires` | Who may do it |
 |---|---|
@@ -109,57 +119,129 @@ python acp.py ... ack <id>   # confirm it is done (consumes the release ticket)
 | `write` / `send` / `pay` / `delete` | **requires a one-shot release ticket signed by a human** |
 
 ```bash
-python acp.py ... userkey                 # create the L2 human key (passphrase-encrypted, host-local, only you know it)
+python acp.py ... userkey                 # create the L2 human key (passphrase-encrypted, host-local, only you know the passphrase)
 python acp.py ... approve <msg_id>        # human release: prompts for the passphrase
-python acp.py ... stop                    # brake: all outbound actions stop immediately (receiving is unaffected)
+python acp.py ... stop                    # brake: every outbound action stops at once (receiving is unaffected)
 python acp.py ... stop --off              # release the brake
 ```
 
-- **The agent cannot obtain the passphrase → it cannot sign its own release ticket.** This is how "an injected agent must not issue itself a permission slip" is enforced.
-- A release ticket **must be signed by the L2 human key**; `ack` verifies it. An agent writing its own `approved-*.json` file is useless.
-- A ticket is **bound to the message ID + action digest + validity window**: if the content changes the ticket is invalid, it is single-use, and replays fail.
-- Semantically, "an inference action paying money" is disallowed: when `requires` is not `none`, `action` must be `exec`, otherwise `send` errors out immediately.
-- `STOP` is just a file: as long as the filesystem works, the brake works — no model, no network needed.
-  **While the brake is on, `ack` is refused across the board** — there is no "lightweight actions are exempt" exception.
+- **The agent cannot obtain the passphrase ⇒ it cannot sign its own release ticket.** This is how "an injected agent must not issue itself a permission slip" is grounded.
+  A ticket **must be signed by the L2 human key** and is verified at `ack` time; it is bound to "message ID + action digest + validity window" — change it and it is void, use it once and it is spent, replaying it does nothing. An agent writing its own `approved-*.json` file does not work.
+- Semantically, "an inference action paying money" is disallowed: when `requires` is not `none`, `action` must be `exec`; otherwise `send` errors out immediately.
+- **`STOP` is a file**: as long as the filesystem is there, the brake works — no model, no network needed. **While the brake is on, `ack` is refused across the board.**
 
-## 6. What a cross-host envelope looks like
+## 4. FAQ (pitfalls we really hit)
 
-### First, the semantics of `to`: like @-mentioning someone in a group chat
+**Q1: After a wake-up, DSH is "hog-tied" and reports `SetNamedSecurityInfoW failed Win32 5`?**
+A: Setting `DSH_PERMISSION_MODE=danger-full-access` **alone is not enough** — it also needs a **clean working directory**:
+a dirty directory cannot have its ACL granted (`grantWrite(<dir>)` is refused, Win32 5 = access denied), and the command
+**fails to start already in the sandbox preparation stage**. Wake it again from a clean directory (we set DSH's cwd to
+`D:\LLM\ACP-lite\_dsh-wake`). This one **does not reproduce reliably** — don't advertise it as "always breaks".
 
-Messages in the shared directory **are visible to every member of the room** (the files simply sit there; there is no confidentiality whatsoever).
-`to` does not decide "who can see it" — it decides **"who is called out, and who should act"**:
+**Q2: Does DSH have `--add-dir`?**
+A: **No.** DSH's writable roots are hard-wired to "the workspace + `/tmp` + the system temp directory", with no extension
+hook, so you must either **hand over the whole machine** (`DSH_PERMISSION_MODE=danger-full-access`) or raise the cwd.
+Codex does have `--add-dir`; write it as `-s workspace-write --add-dir X --add-dir Y`.
+
+**Q3: Can `acp.py --root` be omitted?**
+A: **No.** When omitted it defaults to `<home>/shared` (not the shared group directory), with **exit code 0 and no error
+at all** — but the letter lands in this host's private directory and nobody in the group ever sees it. Always write
+`--root <shared-dir>` explicitly when sending or replying; the criterion is that a file really shows up in `outbox/<recipient-agent>/`.
+
+**Q4: How do I pass Chinese bodies / Chinese prompts?**
+A: **Not through command-line arguments** (`cmd` / PowerShell read UTF-8 as GBK and you receive garbage like `鎶婅繖鍙ヨ瘽…`;
+non-interactive SSH even re-tokenizes). **Use a file + stdin**: write the body to a UTF-8 file first and hand it to the woken
+CLI as `- < prompt.txt`; when sending Chinese mail, also read the file and call `acp.main([...])` **inside the same Python
+process** — never let Chinese text pass through the shell.
+
+**Q5: How do I pass environment variables such as the level to the woken CLI?**
+A: **Only with a single-process `set`**: `set "DSH_PERMISSION_MODE=danger-full-access"` immediately followed by `dsh …`
+(the same `.cmd`, the same process). **Do not chain it as `cmd /c "set X=Y && dsh"`** — the level does not get through, and
+the symptom is **silent zero output** (no error, nothing on disk).
+
+**Q6: Should a wake-up use `schtasks` or a foreground SSH session?**
+A: **Short jobs: foreground SSH; long jobs: a scheduled task.** `schtasks` pops a console window but **survives the SSH
+disconnect**; foreground SSH pops nothing but **dies with the session**. Background jobs started with `start /b` get
+reaped by the SSH session — don't use them.
+
+**Q7: Which sandbox level should Codex use?**
+A: `-s read-only` for read-only work; **anything that writes to disk or sends mail needs `-s workspace-write`, with every
+target directory added via `--add-dir`** — including **the ACP home** (the easiest one to miss). Without write access there
+you get "**the letter was sent, the ledger was not written**": the message went out, but the audit chain `audit.jsonl`
+could not be appended. The startup banner prints the effective writable roots and can be used as hard evidence.
+
+**Q8: Does having the desktop app open interfere with CLI wake-ups?**
+A: **No** (measured): the desktop app and the CLI wake-up are **independent sessions** with no write conflict (with 5 DSH
+desktop processes running, a CLI wake-up still finished in 18 seconds and wrote outside the workspace). The only exception
+is "taking over an existing session": while the Codex desktop client holds the write lock, `resume` fails
+(`already has an active writer`).
+
+## 5. Operations and deployment notes
+
+### Network mode: `auto` by default — don't switch it by hand
+
+```bash
+python acp_net.py --syncthing-home <syncthing-home> status      # show the mode + which path is actually used
+python acp_net.py --syncthing-home <syncthing-home> mode auto   # default mode (formerly called wan)
+python acp_net.py --syncthing-home <syncthing-home> mode strict # strict mode (formerly called lan)
+python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immediately after a network change
+# <syncthing-home> = Syncthing's config directory (contains config.xml):
+#   Windows example: %USERPROFILE%\acp-home\syncthing | Linux/macOS example: ~/.config/syncthing
+```
+
+- In `auto` mode the measured path is a direct LAN connection (`<peer LAN address>:22000 isLocal=True`); the relay merely sits on standby as `Joined relay` — **public servers are the spare tyre, not the main road**. `strict` registers no address at all, and the price is that you cannot find the peer across networks.
+- **After switching networks, don't wait — `kick`**: measured, waiting passively takes about **4 min 50 s**, an active `kick` about **2 s**.
+
+### The token ledger
+
+Writing message files / Syncthing sync / `watch` writing received mail to disk **cost no tokens** (the `watch` process makes **zero network connections** — there is no HTTP client anywhere in the source);
+the **only thing that costs is "automatically calling a model", and this program does not offer that action** (`watch` never calls a model).
+
+```bash
+python acp.py ... send --to dsh --text "this is just an FYI" --reply none    # no reply needed
+python acp.py ... send --to dsh --text "please give me an answer" --reply answer    # an answer is needed
+python acp.py ... digest                                             # the receiver reads everything at once instead of one by one
+```
+
+### Resident and self-checks
+
+- **Autostart**: run `watch --loop` (moves files only; a few tens of MB resident). On Windows, Task Scheduler triggered at logon; on Linux, `systemd --user` (or `crontab @reboot`); on macOS, `launchd`.
+- **Audit / self-test**: every delivery / release / confirmation goes into the `audit.jsonl` hash chain, and `acp.py audit` verifies whether the whole chain has been tampered with; `python selftest.py` runs the whole flow using two temporary "machines" (**the item count is whatever the program prints**).
+
+### Deployment notes
+
+| Item | Notes |
+|---|---|
+| **Keep clocks in sync (NTP)** | if the two machines drift too far, `expires_at` is misjudged (a fresh message is treated as expired) |
+| **Re-trust after rebuilding the identity** | `init --force` replaces the key ⇒ the peer immediately sees `untrusted` and you must verify the fingerprint out-of-band again |
+| **Watch out when the fingerprint changes** | `trust` blocks "new fingerprint ≠ recorded fingerprint"; only after you confirm does `--force` update it (anti-man-in-the-middle) |
+| **Anyone can write `peers/`** | name cards live in the shared directory and any syncing party can overwrite them (low risk). TOFU (trust-on-first-use: lock the fingerprint on first sight, warn when it changes) is a possible future step |
+| **Don't use `ACP_USERKEY_PASSPHRASE` in production** | that environment variable is for self-tests; in production use interactive passphrase entry so the passphrase is not inherited by child processes |
+
+---
+
+§6 – §10 below are **for people**: read them if you want to know *why it is designed this way*; you can skip them if you just want to use it.
+
+## 6. The five iron rules
+
+1. **On-host behaviour is unchanged** — the original file channel stays as it is; this program neither reads nor writes `mailbox/`.
+2. **Cross-host shares exactly one directory** — Syncthing / Tailscale / a cloud drive / a USB stick can all serve as the transport.
+3. **Private keys never enter the shared directory** — `--home` is host-private; the shared directory holds only name cards and outboxes.
+4. **Receiving never calls a model** — `watch` only writes to disk and appends to the audit log; idling burns no tokens.
+5. **Missing dependency means refuse-to-receive (fail-closed)** — without `cryptography` on the host, cross-host messages are **rejected by default**;
+   to receive anyway for a self-test you must pass `--allow-unsigned` explicitly, and such messages are marked `unverified` and **never enter `ready`**.
+
+## 7. The cross-host envelope
+
+The semantics of `to` are like **@-mentioning someone in a group chat**: a message in the shared directory is visible to every member of the room (the file simply sits there; there is no confidentiality whatsoever), and `to` only decides **"who is called out, and who should act"**:
 
 | Value of `to` | Meaning | Other members |
 |---|---|---|
 | `dsh-desktop` | point-to-point: **only DSH is asked to act** | they can see it, but their `watch` neither delivers nor executes it (bystanders) |
 | `*` | broadcast: **everyone is asked to act/respond** | delivered normally, each decides for itself |
 
-So "point-to-point" in this project means **addressed but not encrypted**. Do not put anything in here that others should not see —
-if you need confidentiality, that belongs to "body encryption" (not implemented yet; see the open-issues list in CHANGELOG).
-
-Two things prevent flooding: `hops` (default 4-round cap, preventing endless relay chains) and **good manners** (whoever is addressed replying is enough;
-not everyone needs to pile in). A broadcast is not "everyone must reply".
-
-On top of the original v0.3 fields, an `x` section is added (older bridges that don't know it are unaffected):
-
-```json
-{
-  "version": "0.7.0",
-  "id": "codex-20261005-193000-a1b2",
-  "from": "codex", "to": "dsh", "type": "task",
-  "payload": { "action": "infer", "data": "body text", "timeout": 1800 },
-  "created_at": "2026-10-05T19:30:00+08:00",
-  "x": {
-    "hops": 0, "max_hops": 4,
-    "expires_at": "2026-10-06T19:30:00+08:00",
-    "idem": "codex-20261005-193000-a1b2",
-    "requires": "none",
-    "sig": { "alg": "ed25519", "key": "xxxx-xxxx-xxxx-xxxx", "value": "base64..." }
-  }
-}
-```
-
-Four cross-host rules, all carried in that section:
+So "point-to-point" in this project means **addressed but not encrypted**. Do not put anything in here that others should not see (for body encryption, see the open-issues list in the CHANGELOG).
+Flooding is prevented by `hops` (a default cap of 4 rounds) and by **good manners**: a broadcast is not "everyone must reply".
 
 | Rule | Field | Effect |
 |---|---|---|
@@ -168,163 +250,40 @@ Four cross-host rules, all carried in that section:
 | Loop protection | `hops` / `max_hops` | over the cap it is blocked, so the two sides cannot auto-ignite each other |
 | Expiry means refusal | `expires_at` | a task from three days ago will not suddenly auto-execute when you boot up |
 
-> ⚠️ **On "reply only once" — be precise**: `hops/max_hops` guards against **endless loops**, not against "multi-round exchanges".
-> The default `max_hops=4` means up to 4 round trips are allowed (normal discussion needs that).
-> For a strict "reply only once", add `--max-hops 1` when sending.
-> Also: **one malformed message does not take down the rest of the batch** — a message with a broken format is marked `rejected/malformed` individually and skipped.
+> `hops` guards against **endless loops**, not against "multi-round exchanges": the default `max_hops=4` allows 4 round trips; for a strict "reply only once", add `--max-hops 1`.
+> **One bad message does not take down the others in the same round** (it is marked `rejected/malformed` and skipped).
 
-## 7. Day-to-day operations
+The field-level specification (the meaning of every field in the `x` section, the signature algorithm, `created_at`, …) is in `ENVELOPE-FORMAT.md`.
+**A hand-written envelope has no signature → it is always rejected**; don't hand-write, use `send`.
 
-### Network mode: `auto` by default — don't switch it by hand
+## 8. Positioning: compared with MCP / A2A / message middleware
 
-**Whether you are on the same LAN or across networks is decided by the transport itself** — no human needs to worry about it:
+| | ACP-lite | MCP | Google A2A | NATS / Redis PubSub |
+|---|---|---|---|---|
+| Problem solved | cross-host agent messaging | models calling external tools | standardized agent-to-agent communication | general real-time messaging |
+| Transport | Syncthing file sync | local STDIO / HTTP | HTTP + JSON-RPC | long-lived TCP connections |
+| Public IP / server needed | no | no (local) | yes (a service endpoint) | yes (a broker) |
+| Two computers behind NAT | works out of the box | not applicable | needs NAT traversal | needs NAT traversal |
+| Message signature / audit | ed25519 + hash chain | none (roll your own) | implementation-dependent | none (roll your own) |
+| Latency | seconds | real time | real time | milliseconds |
+| Suitable scale | individuals / small teams | single-host agents | enterprise agent networks | engineering systems |
 
-| Mode | Global discovery | Relay | Notes |
-|---|---|---|---|
-| **`auto` (default, recommended)** | on | on | on the same network it connects over the LAN; only if direct fails does it consult the "phone book" and fall back to a relay. **On ≠ actually going out to the internet** |
-| `strict` | off | off | never registers its address with public servers; the price is **you cannot find the peer across networks**. Use only when you explicitly require "not one byte may leave the network" |
+> Positioning sentence: **ACP-lite is the minimal communication scheme for "agents on two ordinary computers behind NAT"; for enterprise-grade standardization go to A2A, for a model calling tools go to MCP, for millisecond latency go to message middleware.**
 
-```bash
-python acp_net.py --syncthing-home <syncthing-home> status      # show the mode + which path is actually used
-python acp_net.py --syncthing-home <syncthing-home> mode auto   # default mode (formerly called wan)
-python acp_net.py --syncthing-home <syncthing-home> mode strict # strict mode (formerly called lan)
-python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immediately after a network change
-# <syncthing-home>  =  Syncthing's config directory (contains config.xml)
-#   Windows example: %USERPROFILE%\acp-home\syncthing
-#   Linux/macOS example: ~/.config/syncthing
-```
+## 9. Dependencies and attribution
 
-#### Slow after switching networks? First see where the slowness is (measured)
+- **The communication layer is not something we invented**: cross-host communication is **built on top of [Syncthing](https://github.com/syncthing/syncthing)**
+  (Syncthing is an open-source continuous file-sync tool created by Jakob Borg and community contributors, now maintained by the
+  Swedish non-profit Syncthing Foundation together with the community). **We did not write the sync layer and we claim no originality
+  over it** — our thanks go to the Syncthing project and its maintainers. All we added is a thin layer of **signed envelopes + hash-chained audit**.
+- **Runtime dependencies**: Python 3.9+, `cryptography`, Syncthing (plus OpenSSH if you want cross-host wake-ups, see §1).
+- This project is released under **MIT** (see `LICENSE`); the English attribution notice is in [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md).
 
-| Scenario | Measured time |
-|---|---|
-| **Passively waiting** for it to reconnect after a network switch | **about 4 min 50 s** |
-| Actively poking it with `kick` | **about 2 s** |
+## 10. Boundaries and disclaimers (stated honestly)
 
-The root cause is not "retries are too slow" but that **the carrier-side network mapping has not been established yet** — the log at the time showed seven consecutive
-`Failed to exchange Hello messages … EOF`, meaning "the TCP connection succeeded but the peer did not answer".
-Once the path really works, the reconnect itself is a matter of seconds.
-
-Hence two improvements:
-1. **Retry interval lowered from the default 20 s to 5 s** (the `mode` command sets this automatically) — so the moment the path opens it is caught;
-2. **After switching networks, give it a `kick`** — restart the transport, forcing rediscovery and redialing (measured: 2 s).
-
-> For "connect instantly on a network switch, completely seamless", only an always-on connection can deliver that (a private tunnel such as Tailscale).
-> Public discovery + relay inherently has to wait for "re-register + find the peer again", so anywhere from seconds to minutes is normal.
-
-Measured (in `auto` mode): global discovery and relaying are both on, and **the actual connection is still `<peer LAN address>:22000 tcp-server isLocal=True`**
-— a direct LAN connection, no detour. The relay merely sits on standby as `Joined relay` and carries no data.
-
-> In one line: **public servers are the spare tyre, not the main road. The main road is always the shortest path between the two machines.**
-> There is exactly one case worth going `strict`: you explicitly require "not even address registration may happen".
-> To get **cross-network traffic that still never touches a public server**, you need a private virtual network (Tailscale and friends) — that is a third mode, not a binary choice.
-
-### The token ledger (know where the money goes first)
-
-| Stage | Costs tokens? | How to verify |
-|---|---|---|
-| Writing a message file / Syncthing sync | no | open-source software, pure file moving |
-| `watch` receiving and writing to disk | **no** | the process makes **zero network connections**, and the source contains no HTTP client at all |
-| Automatically calling a model | **yes — and it is the only cost** | this program **does not** provide automatic processing; `watch` never calls a model |
-
-So the precondition for free idling is: **do not enable automatic processing**. When you want work done, a human says so — or a scheduled job runs.
-
-Two token-saving conventions:
-
-```bash
-# ① Mark "does this need a reply" when sending (default answer, safe-first)
-python acp.py ... send --to dsh --text "just an FYI" --reply none     # no reply needed
-python acp.py ... send --to dsh --text "please respond" --reply answer # an answer is needed
-
-# ② The receiver uses digest to see everything at once, instead of reading one by one
-python acp.py ... digest
-```
-
-A `digest` line looks like this, so a single call tells you which ones can be skipped wholesale:
-
-```
-[none  ] hermes-netbook-...   hermes-netbook  requires=none  ←不用回
-[answer] dsh-desktop-...      dsh-desktop     requires=none  ←需回答
-汇总：none 1 条 · answer 1 条
-```
-
-> The program's output labels are currently **in Chinese**, so the sample above is quoted verbatim
-> (`←不用回` = no reply needed, `←需回答` = answer needed, `汇总` = summary).
-> If you want English output, change the program — not the documentation.
-
-- **Autostart**: run `watch --loop`. It **only moves files**, never calls a model, sits at a few tens of MB of RAM, and incurs no inference cost.
-  - Windows: Task Scheduler, triggered at logon.
-  - Linux: a `systemd --user` service (or `crontab @reboot`) launching the same command; macOS can use `launchd`.
-- **Audit**: every delivery / release / confirmation goes into the `audit.jsonl` hash chain; the `audit` command verifies whether the whole chain has been tampered with.
-- **Self-test**: `python selftest.py` runs the whole flow using two temporary "machines" (covering the gate, the brake,
-  forged release tickets, content swapping, unsigned fallback, malformed-message isolation, temporary-file naming) — no network needed.
-  **The item count is whatever the program prints** — all green means it passed; the documentation no longer hard-codes a number.
-- **Synced directory**: put the repo's `.stignore` at the root of the Syncthing folder. It blocks two kinds of things:
-  temporary files (`~syncthing~*` / `*.tmp`) and **conflict copies** (`*.sync-conflict-*` — those also end in
-  `.json`, and without the rule they get scanned as if they were letters).
-
-## 8. Deployment notes (all learned the hard way, or reasoned out)
-
-| Item | Notes |
-|---|---|
-| **Install cryptography on both machines** | otherwise they fall into unsigned mode and cross-host messages are rejected by default (fail-closed) |
-| **Keep clocks in sync (NTP)** | if the two machines drift too far, `expires_at` is misjudged (fresh messages treated as expired) |
-| **Re-trust after rebuilding identity** | `init --force` replaces the key ⇒ the peer immediately sees `untrusted` and you must verify fingerprints out-of-band again |
-| **Watch out when a fingerprint changes** | `trust` blocks "new fingerprint ≠ recorded fingerprint"; only after you confirm does `--force` update it (anti-man-in-the-middle) |
-| **Agent names must be unique across machines** | two machines cannot both be called `codex` (they would overwrite name cards and crowd into one outbox); use qualified names like `codex@desktop` |
-| **Anyone can write `peers/`** | name cards live in the shared directory and any syncing party can overwrite them (low risk). TOFU (trust-on-first-use) is a possible future step |
-| **Don't use `ACP_USERKEY_PASSPHRASE` in production** | that environment variable is for self-tests; in production use interactive passphrase entry so the passphrase is not inherited by child processes |
-
-## 9. Boundaries (stated honestly)
-
-- ⚠️ **The message body is plaintext on disk**: Syncthing's **transport** is end-to-end encrypted (a relay only ever sees ciphertext),
-  but the message **as a file in the shared directory is plaintext**. Until body encryption (X25519 + AES-GCM) lands,
-  **do not send sensitive content over this channel** — "there is end-to-end encryption" does not mean "the disk is safe".
-- This program **calls no model**, and it does not decide "whether to execute" for you — it only delivers messages safely and guards the gate.
-- Agents themselves are not addressable (true of every vendor); **what is addressable is the machine**; identity is held by the post office on its behalf.
-- Metadata about the synced directory (who syncs with whom, file sizes) is visible to Syncthing relays; for confidential content, turn off public relays and use a LAN or Tailscale, or a mail / object-storage backend.
-- Dependencies: **Python 3.9+ and `cryptography`**. The latter is nominally "optional" (the program starts fine without it and single-host self-tests run),
-  but **without it you are fail-closed: all cross-host messages are rejected**, i.e. cross-host is unusable — so **treat it as required for any real deployment** (see iron rule 5).
-
----
-
-## 10. What it can and cannot do (the one-line boundary)
-
-> This section is for someone seeing the project for the first time: **do not mistake a "shared folder" for "remote execution"**. Three points.
-
-- ✅ **It can: share files across hosts.**
-  Sync the same directory (`acp-shared`) to several machines with Syncthing, and an agent writes a signed letter into `outbox/<self>/`.
-  The peer receives it, verifies the signature and appends to its audit chain by itself — this part **costs no model tokens at all**.
-
-- ⚠️ **It can: ring the peer's doorbell across hosts over SSH — if that peer runs an OpenSSH server** (updated 2026-10-15;
-  the earlier wording "this project contains no cross-host wake-up channel" is outdated). This project still ships **no**
-  wake-up channel of its own (`watch` never calls a model), and it does **not** call the peer's agent for you — but the SSH
-  doorbell has been verified end-to-end 5 times on 2026-10-14/15 (screen off; after a reboot; ACP + SSH two paths in one boot).
-  The rule is **ACP is the ledger, SSH is the doorbell**: a wake-up passes only a "pointer" (the absolute path of the received
-  letter), and the peer's own session then reads the body from its mailbox, works, writes to disk and sends a signed receipt.
-  Install steps and the exact commands (Codex / DSH, and the same-host CLI pair) are in [README.md](README.md) §1
-  "可选：跨机唤醒通道（SSH 服务端）"; the 8 pitfalls we actually hit are the FAQ in §4 (English translation pending).
-  What is *not* solved: if the peer is off, or has no `watch` running, your letter simply queues in the mailbox — **nobody
-  will go and wake it up for you**, and a wake-up that returns `exit 0` has not necessarily done the work.
-
-- ✅ **Same host: two agents on one machine can wake each other over CLI (both directions).**
-  One line on each side does it (the pair below is the measured phrasing for a resident two-agent host; the same applies to your own CLIs):
-
-  ```bash
-  openclaw agent --message "reply with just one word: received"   # Blueberry (Hermes) → Cake (OpenClaw)
-  hermes -z "reply with just one word: received"                  # Cake → Blueberry (the reverse holds too)
-  ```
-
-  The proper form passes a "pointer" (the body still travels through the mailbox — never pass the body over CLI):
-
-  ```bash
-  dsh --profile headless "read <absolute path of the received file> and act on it"      # Codex → DSH
-  ```
-
-  The rule: **a wake-up passes only a "pointer" (the absolute path of the received file, which is where the msg_id lives); the body is still read by the other side from the mailbox** —
-  **ACP is the ledger, CLI is the doorbell; a doorbell cannot replace a ledger** (signature verification, audit chain, deduplication/idempotence, cross-host uniformity — CLI handles none of these).
-
-  > **Two details you must know**: ① before waking the DSH side, set `DSH_PERMISSION_MODE=danger-full-access` (Windows PowerShell: `$env:DSH_PERMISSION_MODE='danger-full-access'`) — without it the headless session will not start;
-  > ② the reverse direction (DSH waking Codex) works the same way: `codex exec --skip-git-repo-check --ephemeral "read <absolute path of the received file> and act on it"`.
-
-- ⚠️ In one line: **this project solves "how a message arrives reliably"; it does not solve "how the other side gets woken up".**
+- ⚠️ **The body is plaintext on disk**: Syncthing's **transport** is end-to-end encrypted (a relay only ever sees ciphertext), but the message
+  **as a file in the shared directory is plaintext**. Until body encryption (X25519 + AES-GCM) lands, **do not send sensitive content over this channel**.
+- Metadata about the synced directory is visible to Syncthing relays; for confidential content, turn off public relays and use a LAN or a Tailscale network instead.
+- This program **calls no model** and does not decide "whether to execute" for you; the agents themselves are not addressable — **what is addressable is the machine**, and identity is held by the post office on its behalf.
+- **It guarantees "delivery", not "waking up"**: a wake-up is a bolt-on doorbell (same-host CLI calls / cross-host SSH wake-up, commands in §1) and
+  **is not part of ACP-lite itself**; if the peer is off, or has no `watch` running, your letter just queues in its mailbox.
