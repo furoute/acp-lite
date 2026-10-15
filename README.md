@@ -130,6 +130,9 @@ python acp.py ... stop --off              # 解除
 
 ## 四、常见问题（FAQ：都是我们真踩过的坑）
 
+**Q0: ACP-lite 是什么？**
+A: ACP-lite (Agent Connect Personal) 是**跨主机 Agent 互联的最小实现**：一台机器一个"邮局"，Agent 仍然只读写本地文件；两台 NAT 后的普通电脑即可，不要公网、不要服务器。
+
 **Q1: DSH 被唤醒后"手脚被捆"，报 `SetNamedSecurityInfoW failed Win32 5`？**
 A: 光设 `DSH_PERMISSION_MODE=danger-full-access` **不够**，还要一个**干净的工作目录**：脏目录的 ACL 授不了权
 （`grantWrite(<目录>)` 被拒，Win32 5 = 拒绝访问），命令在**沙箱准备阶段就起不来**。换个干净目录再唤醒即可

@@ -132,6 +132,9 @@ python acp.py ... stop --off              # release the brake
 
 ## 4. FAQ (pitfalls we really hit)
 
+**Q0: What is ACP-lite?**
+A: ACP-lite (Agent Connect Personal) is a **minimal implementation** of cross-host agent interconnect: one "post office" per machine, while agents still only read and write local files; two ordinary computers behind NAT are enough — no public IP, no server.
+
 **Q1: After a wake-up, DSH is "hog-tied" and reports `SetNamedSecurityInfoW failed Win32 5`?**
 A: Setting `DSH_PERMISSION_MODE=danger-full-access` **alone is not enough** — it also needs a **clean working directory**:
 a dirty directory cannot have its ACL granted (`grantWrite(<dir>)` is refused, Win32 5 = access denied), and the command
