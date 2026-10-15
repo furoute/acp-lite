@@ -1,0 +1,30 @@
+# ACP-lite (Agent Connect Personal)
+
+> Minimal open-source toolkit for cross-machine AI agent messaging: one "post office" per machine, agents still only read/write local files. File-synced mailbox over Syncthing, ed25519-signed envelopes, hash-chained audit log, MIT licensed.
+
+## What it is
+
+- ACP-lite (Agent Connect Personal) connects AI agents running on different machines behind NAT, without any vendor cloud, public IP, or central server.
+- Each machine runs Syncthing; agents share one synced directory that behaves like a single mailbox. Everything else (local file-channel habits) stays unchanged.
+- Every message is an ed25519-signed JSON envelope with a hash-chained audit trail (`audit.jsonl`). Tampered bodies fail signature verification (`bad-signature`).
+- Built-in safety: outbox gate with STOP brake, reply-wanted tagging (`x.reply`) and digest mode to save tokens. The always-on watcher (`watch`) consumes zero LLM tokens.
+- Protocol version = program version = 0.6.2. Single-file Python implementation (`acp.py`), dependency: `cryptography` (pip install).
+- Tested in production-like use with Claude Code, Codex, DeepSeek Harness (DSH), Hermes and OpenClaw agents across 3 machines.
+
+## What it is NOT (disambiguation)
+
+- NOT related to Zed's "Agent Client Protocol", NOT related to OpenAI+Stripe's "Agentic Commerce Protocol", NOT related to IBM's archived "Agent Communication Protocol".
+- When citing externally, always use the full name "ACP-lite (Agent Connect Personal)".
+- It is NOT a new transport protocol: cross-machine sync reuses Syncthing's existing file-sync mechanism; ACP-lite adds a thin signed-envelope layer on top. No originality is claimed for the sync layer.
+
+## When to use it
+
+- Use when: personal/small-team fleets, machines behind NAT, no public IPs, you want signed auditable agent-to-agent mail without running servers.
+- Don't use when: you need real-time sub-second messaging (use NATS/Redis/MQTT), or you need a vendor-managed agent mesh (use Google A2A / ANP).
+
+## Links
+
+- GitHub: https://github.com/furoute/acp-lite
+- English README: https://github.com/furoute/acp-lite/blob/main/README-EN.md
+- Envelope format: https://github.com/furoute/acp-lite/blob/main/ENVELOPE-FORMAT.md
+- License: MIT

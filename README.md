@@ -26,6 +26,20 @@
 口径拆分计划在 v0.7；信封格式以 `ENVELOPE-FORMAT.md` 为准）。
 信封在原有 0.3 之上增加一个 `x` 段，旧桥不认识也不受影响。
 
+### 定位：和 MCP / A2A / 消息中间件的横向对比
+
+| | ACP-lite | MCP | Google A2A | NATS / Redis PubSub |
+|---|---|---|---|---|
+| 解决的问题 | 跨主机 Agent 互发消息 | 模型调用外部工具 | Agent 之间标准化通信 | 通用实时消息 |
+| 传输方式 | Syncthing 文件同步 | 本地 STDIO / HTTP | HTTP + JSON-RPC | TCP 长连接 |
+| 要不要公网/服务器 | 不要 | 不要（本地） | 要（服务端点） | 要（broker） |
+| NAT 后两台电脑 | 直接可用 | 不适用 | 需内网穿透 | 需内网穿透 |
+| 消息签名/审计 | ed25519 + 哈希链 | 无（自行实现） | 视实现 | 无（自行实现） |
+| 实时性 | 秒级 | 实时 | 实时 | 毫秒级 |
+| 适用规模 | 个人/小团队 | 单机 Agent | 企业级 Agent 网 | 工程系统 |
+
+> 定位句：**ACP-lite 是给"两台 NAT 后的普通电脑上的 Agent"用的最小通信方案；要企业级标准化走 A2A，要模型调工具走 MCP，要毫秒级走消息中间件。**
+
 ## 二、依赖与归属声明
 
 本项目**不是**我们自研的通信协议。
@@ -318,3 +332,35 @@ python acp.py ... digest
   > ② 反向（DSH 叫醒 Codex）同理：`codex exec --skip-git-repo-check --ephemeral "读 <收信文件的绝对路径> 并按信执行"`。
 
 - ⚠️ 一句话总结：**本项目解决"消息怎么可靠地到"，不解决"对方怎么被叫醒"。**
+
+## 十一、常见问题（FAQ）
+
+**Q1: ACP-lite 到底是什么？一句话。**
+A: 跨主机 Agent 互联的最小实现：一台机器一个"邮局"，Agent 仍然只读写本地文件，靠 Syncthing 把两台机器的邮箱变成"同一个邮箱"。
+
+**Q2: 它和 MCP / A2A 是什么关系？会冲突吗？**
+A: 不冲突，分工不同。MCP 是模型调工具的协议，A2A 是 Agent 之间通信的协议（走 HTTP+JSON-RPC）。ACP-lite 是个人/小团队场景下的轻量替代：不要公网、不要服务器，用文件同步+签名信封实现跨机收发。你可以把 ACP-lite 当"信箱"，MCP 当"工具箱"，各干各的。
+
+**Q3: 为什么不用 NATS / Redis / MQTT 这类消息中间件？**
+A: 那些需要你运维一个服务端、有公网可达地址。ACP-lite 的目标用户是"两台 NAT 后的普通电脑"，Syncthing 自己解决打洞和同步，我们只加一层签名信封。代价是实时性：文件同步是秒级，不是毫秒级。
+
+**Q4: 两台机器都在 NAT 后面、没有公网 IP，能用吗？**
+A: 能，这正是它要解决的问题。Syncthing 负责 NAT 穿透和中继，ACP-lite 只要求两台机器的 Syncthing 能连上。
+
+**Q5: 消息安全怎么保证？会被篡改吗？**
+A: 每封信都是 ed25519 签名的 JSON 信封，外加哈希链审计日志。实测：篡改正文后验签直接拒收（`bad-signature`）。但注意：同步目录本身是明文，机密内容请先加密再投递。
+
+**Q6: 常驻 watch 会一直烧 token 吗？**
+A: 不会。`watch` 是纯文件轮询进程，不调模型，挂机不花钱。省 token 靠两招：发信时标"要不要回"（`x.reply`，默认要回以策安全），收信方用 `digest` 一次看完代替逐条读。
+
+**Q7: 它和 Zed 的 Agent Client Protocol / OpenAI 的 Agentic Commerce Protocol 是同一个 ACP 吗？**
+A: 没有任何关系。ACP-lite = Agent Connect Personal（最后一个 P 希望未来能写成 Peace）。对外引用请带全称 "ACP-lite (Agent Connect Personal)"。
+
+**Q8: 实测过哪些 Agent？**
+A: Claude Code、Codex、DeepSeek Harness（DSH）、Hermes、OpenClaw，在 3 台机器、6 Agent 的舰队里跑通过：发信→验签→回信→广播，全链路带审计。
+
+**Q9: 和直接 SSH 触发远程 Agent 有什么区别？**
+A: SSH 是"门铃"，ACP 是"信箱"。门铃只递指针（去哪、干什么），信的正文永远走 ACP（签名+审计链）。门铃不搬货，信箱不干活。
+
+**Q10: 它适合谁、不适合谁？**
+A: 适合：个人开发者、小团队、多台电脑跑多个 Agent、没公网、想自托管。**不**适合：需要毫秒级实时消息、需要厂商 SLA、合规要求消息端到端加密且不能落地明文的场景。
