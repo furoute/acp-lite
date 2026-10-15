@@ -16,7 +16,7 @@ Two ordinary computers behind NAT — no public IP, no server.
 > When citing it, please use the full name "ACP-lite (Agent Connect Personal)".
 
 **How to read this**: it is an operating manual — the commands are meant to be copied as they are; `<home-dir>` / `<shared-dir>` / `<agent>` / `<peer-agent>` are placeholders.
-Setup is §1, the command cheat sheet is §2, and **when something breaks, look at §4 first (those 8 FAQs are pitfalls we really hit)**.
+Setup is §1, the command cheat sheet is §2, and **when something breaks, look at §4 first (8 pitfall FAQs + 1 definition)**.
 The design rationale / comparison table / attribution / boundaries are §6 – §10 (for people who want to know *why*; skip them if you just want to use it).
 Program version = protocol version = **0.7.0**; the envelope format is defined by `ENVELOPE-FORMAT.md`.
 
@@ -130,7 +130,7 @@ python acp.py ... stop --off              # release the brake
 - Semantically, "an inference action paying money" is disallowed: when `requires` is not `none`, `action` must be `exec`; otherwise `send` errors out immediately.
 - **`STOP` is a file**: as long as the filesystem is there, the brake works — no model, no network needed. **While the brake is on, `ack` is refused across the board.**
 
-## 4. FAQ (pitfalls we really hit)
+## 4. FAQ (8 pitfalls + 1 definition)
 
 **Q0: What is ACP-lite?**
 A: ACP-lite (Agent Connect Personal) is a **minimal implementation** of cross-host agent interconnect: one "post office" per machine, while agents still only read and write local files; two ordinary computers behind NAT are enough — no public IP, no server.
