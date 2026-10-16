@@ -35,9 +35,11 @@
 | D-6 | `e8caea0` | 同步 | `README-EN.md` 与定稿的中文版**整篇对齐重写**（208+/249−） |
 | D-7 | `2534761` | 工具 | 新增 `push-acp.cmd`：无人值守 `git push` 的**零弹窗姿势**（强制 `http.sslBackend=openssl` + 清空 `credential.helper` + URL 带 token），绕开 schannel 崩溃弹窗 —— 属**运维脚本**，不进 `acp.py`，不影响协议 |
 | D-8 | `8495713` / `4cd28f3` | 清理 | 一次无人值守 push 的**测试产物**（`.push-test-log.txt`）加入又删除，**净变化 0**；如实记录，免后人误读 |
+| D-9 | `4e309f9` / `0a4209a` / `c9e6fc6` / `e36e08e` / `1217feb` / `a4b443d` / `2aa585c` | 修订 | **2026-10-16 文档修复批次**（**仅文档，`*.py` 一字未动**）：读完 README v3 后，把散在中英两版 README、`llms.txt` 与发布件正文里的过时引用与过时事实一次性收敛 —— ① `4e309f9` README-EN 整篇对齐中文定稿（314+/139−）；② `0a4209a` README 交叉引用修瑕（step-6 指向 + 括号不配对）；③ `c9e6fc6` README 残留 6 处已作废的 `§一`/`§二` 编号改为现行章节名（中英同步，改后 `§` 残留 **0**）；④ `e36e08e` `llms.txt` 章节引用对齐 v3 重编号；⑤ `1217feb` 按 Muse 的 GEO 复审修 `llms.txt` 一句（"单文件实现"→"核心协议单文件实现"，仓库实有 8 个 `.py`）并就地改发布件正文 3 处；⑥ `a4b443d` 再据 GEO 复审清 CHANGELOG **W-1 / W-3 / D-5** 三行的过时引用与计数（"8 条踩坑"→"现为 9 条，Q5→Q13"），发布件正文同句一并改；⑦ `2aa585c` 清掉最后一处悬空 `§` 引用，并把**唤醒后回执纪律**（被唤醒方做完必回签名回执 + 广播；唤醒方守到回执再到人主动报；一句话："要么看得见在跑，要么完成必须带着回执回来，二者必居其一"）写进 README 第六步。同轮追加：`ENVELOPE-FORMAT.md` 一行版本错记订正（`reply_to` 顶层双写是 **v0.7.0 起**，不是 v0.6.2） |
 
 > **净变化**（`git diff --stat v0.7.0..HEAD`）：`README.md`、`README-EN.md` 改写 + 新增 `push-acp.cmd`，
 > **3 files changed, 536 insertions(+), 366 deletions(-)**；**`*.py` 与 `VERSION` 常量一个字没动**。
+> 另加 **D-9 一批**（`4e309f9..2aa585c`，含 README-EN 整篇对齐、§/交叉引用清理、`llms.txt`/发布件事实订正与唤醒后回执纪律入库）：`README.md` / `README-EN.md` / `llms.txt` / `CHANGELOG.md` 四个文件，**仍不动代码**；同批（`docs: correct reply_to dual-write version`）另修 `ENVELOPE-FORMAT.md` 一行版本错记（`reply_to` 顶层双写是 **v0.7.0 起**）。
 > 自测口径不变：`python selftest.py` = **通过 47 项，失败 0 项**（代码未动，结果与 v0.7.0 一致）。
 
 ## 〇之六、v0.7 待定项（2026-10-11 笔记本 Codex 起草，**待审**）

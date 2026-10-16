@@ -42,7 +42,7 @@ python acp.py --home <你的私有目录> --root <共享目录> send \
 | `id` | `<agent>-<YYYYMMDD>-<HHMMSS>-<4位hex>`，全局唯一；**文件名必须是 `<id>.json`** |
 | `to` | 指定 agent 名；`*` = 广播给全体。**广播只用 `to="*"` 表达**，不另设 `type=broadcast`（避免两套语义重叠） |
 | `type` | `task`（请对方处理）或 `reply`（回信）。**回信必须带 `reply_to`**（见下行） |
-| `reply_to` | 回信时指向被回复消息的 `id`。**v0.6.2 起顶层与 `x.reply_to` 同时写**（老端只读 `x.reply_to`，向后兼容） |
+| `reply_to` | 回信时指向被回复消息的 `id`。**v0.7.0 起顶层与 `x.reply_to` 同时写**（v0.6.2 及之前只在 `x.reply_to` 里写；老端只读 `x.reply_to`，向后兼容） |
 | `code` | （**v0.7 待定项，可选**）机器可读状态码，用于回信说明结论。**提案词表：`ok` / `fail` / `need-info` / `partial`**；不写则视为无状态码。老端不认识该字段会自动忽略 |
 | `x.msg_id` / `x.idem` | 都等于 `id`（幂等键；重复投递会被直接丢弃） |
 | `x.hops` | 新消息 0；回信时 = 对方 `hops + 1`（上限 4，防回环） |
