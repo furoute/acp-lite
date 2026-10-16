@@ -199,6 +199,13 @@ hermes -z "reply with just one word: received"                  # Cake → Blueb
 A wake-up carries only a "**pointer**" (the absolute path of the received letter, which is where `msg_id` lives); the body is still read by the other side from its own mailbox --
 **ACP is the ledger, the CLI is the doorbell; a doorbell cannot replace a ledger**. And **do not judge by the exit code**: `exit 0` may mean "it really did the work" or merely "it said something" -- the criteria are **an artifact on disk + a longer audit chain + a signed receipt**.
 
+**A wake-up must be followed by a report (a collaboration discipline, not an implementation detail of one machine)**
+
+- **The woken side** (Codex / DSH): stay visibly "processing" while working (do not exit the session early); when done you **must send a signed ACP reply + a broadcast** -- going quiet leaves the waker unable to tell whether you never got it, are still working, or already finished.
+- **The waker** (Blueberry and friends): **watch until the receipt arrives**; report completion -- or timeout -- to the human **proactively**, and never make them ask.
+- **Why**: the human **does not watch the screen and cannot see background windows**. "Fire and forget" leaves them **unable to tell whether the task is running, stuck, or already finished** -- the experience degrades.
+- One-line principle: **"Either you can see it working, or the completion must come back with a reply -- one of the two is mandatory."**
+
 ---
 
 ## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 9 pitfalls)
