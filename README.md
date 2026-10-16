@@ -20,7 +20,7 @@
 > **没有任何关系**。对外引用时请带上全称 "ACP-lite (Agent Connect Personal)"。
 
 **怎么读**：正文是**步骤化的** —— 第一步做什么、第二步做什么，每步**只写做什么 + 照抄的命令**。
-遇到问题先查 **§一 FAQ**：怎么连、怎么登、踩过哪些坑）。想了解"为什么这么设计"再看 **§二 附录**，照着用可以一眼不看。
+遇到问题先查 **§一 FAQ**（怎么连、怎么登、踩过哪些坑）；想了解"为什么这么设计"再看 **§二 附录**，照着用可以一眼不看。
 占位符：`<home-dir>` 本机**私有**目录 ｜ `<shared-dir>` 两台机**同步**的目录 ｜ `<agent>` / `<对方agent>` agent 名。
 程序版本 = 协议版本 = **0.7.0**；信封格式以 `ENVELOPE-FORMAT.md` 为准。
 
@@ -430,7 +430,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
   （Syncthing 是由 Jakob Borg 与社区贡献者创建的开源连续文件同步工具，现由瑞典的非营利基金会
   Syncthing Foundation 与社区共同维护）。**同步层不是我们写的，我们不主张任何原创性** ——
   谨向 Syncthing 项目及其维护者致谢。我们加的只是一层**签名信封 + 哈希链审计**的薄脚本。
-- **运行依赖**：Python 3.9+、`cryptography`、Syncthing（要跨机唤醒再加 OpenSSH，见 §第六步）。
+- **运行依赖**：Python 3.9+、`cryptography`、Syncthing（要跨机唤醒再加 OpenSSH，见第六步）。
 - 本项目以 **MIT** 发布（见 `LICENSE`）；英文版归属声明见 [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md)。
 
 ### H. 边界与免责（诚实说明）
@@ -441,4 +441,4 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
 - **审计链防"事后改"，不防"该记没记"**：有审计 ≠ 有追责。
 - 本程序**不调用任何模型**，也不替你决定"要不要执行"；Agent 本身不可寻址，**可寻址的是机器**，身份由邮局代持。
 - **能保证"送到"，不保证"叫醒"**：本项目**不内置唤醒通道，但已实测可用**（同机 CLI 互调 / 跨机 SSH 唤醒，
-  命令见 §第六步），**它不是 ACP-lite 自带的**；对端没开机、或没挂 `watch` 时，你的信就只是在信箱里排队。
+  命令见第六步），**它不是 ACP-lite 自带的**；对端没开机、或没挂 `watch` 时，你的信就只是在信箱里排队。
