@@ -20,7 +20,7 @@
 > **没有任何关系**。对外引用时请带上全称 "ACP-lite (Agent Connect Personal)"。
 
 **怎么读**：正文是**步骤化的** —— 第一步做什么、第二步做什么，每步**只写做什么 + 照抄的命令**。
-遇到问题先查 **§一 FAQ**（怎么连、怎么登、踩过哪些坑）；想了解"为什么这么设计"再看 **§二 附录**，照着用可以一眼不看。
+遇到问题先查 **一、常见问题（FAQ）**（怎么连、怎么登、踩过哪些坑）；想了解"为什么这么设计"再看 **二、附录**，照着用可以一眼不看。
 占位符：`<home-dir>` 本机**私有**目录 ｜ `<shared-dir>` 两台机**同步**的目录 ｜ `<agent>` / `<对方agent>` agent 名。
 程序版本 = 协议版本 = **0.7.0**；信封格式以 `ENVELOPE-FORMAT.md` 为准。
 
@@ -32,7 +32,7 @@
 pip install cryptography
 ```
 
-不装也能启动，但**跨机消息一律拒收**（fail-closed，见 §二 A 铁律 5）—— 所以当**必装**。
+不装也能启动，但**跨机消息一律拒收**（fail-closed，见二、附录 A 铁律 5）—— 所以当**必装**。
 
 # 第二步：让两台机器交换文件（传输层）
 
@@ -74,7 +74,7 @@ python acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> 
 
 三条必守：
 
-- **`--root` 不能省**：省了会默认写 `<home>/shared`，**退出码 0、看着像成功**，信却落在本机私有目录（见 §一 Q5）。
+- **`--root` 不能省**：省了会默认写 `<home>/shared`，**退出码 0、看着像成功**，信却落在本机私有目录（见一、常见问题 Q5）。
 - **agent 名要跨机唯一**：两台机器不能都叫 `codex`（会覆盖名片、挤进同一个发件箱）。
 - **私钥不进共享目录**：`--root` 下应该只有 `peers/`、`outbox/`、`.stignore`。
 
@@ -138,7 +138,7 @@ WantedBy=default.target
 # 第六步（可选）：跨主机 SSH 唤醒
 
 本项目**不内置**唤醒通道（`watch` 永不调模型），但**已实测可用**（SSH 直连，2026-10-14 / 10-15，5 次闭环全过）——
-**在我们这套环境、这 5 次里**如此；换环境不保证同样顺利（DSH 那条见 §一 Q9）。
+**在我们这套环境、这 5 次里**如此；换环境不保证同样顺利（DSH 那条见一、常见问题 Q9）。
 被唤醒的那台机器装 OpenSSH 服务端即可，22 端口只对本网段开：
 
 ```powershell
@@ -157,14 +157,14 @@ sudo apt install openssh-server        # macOS 已自带 OpenSSH
 唤醒命令（提示词**走文件 + stdin**，中文和特殊字符都不会被 shell 弄坏）：
 
 ```cmd
-rem 唤醒 Codex（沙箱档位必须让目标目录可写 —— 见 §一 Q1）
+rem 唤醒 Codex（沙箱档位必须让目标目录可写 —— 见一、常见问题 Q1）
 codex exec -s workspace-write --skip-git-repo-check -C D:\_wake ^
   --add-dir D:\SharedFiles --add-dir D:\ACP-Shared --add-dir D:\LLM\ACP-lite\home ^
   - < 提示词.txt
 ```
 
 ```cmd
-rem 唤醒 DSH（档位环境变量必须与 dsh 同进程 —— 见 §一 Q2）
+rem 唤醒 DSH（档位环境变量必须与 dsh 同进程 —— 见一、常见问题 Q2）
 set "DSH_PERMISSION_MODE=danger-full-access"
 cd /d D:\LLM\ACP-lite\_dsh-wake
 dsh --profile headless - < 提示词.txt
