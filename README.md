@@ -38,14 +38,18 @@ pip install cryptography
 
 ```powershell
 winget install Syncthing.Syncthing          # Windows；Linux/macOS 走包管理器或官网下载
-python acp-deviceid.py                      # 打印本机 Device ID（不依赖 Syncthing 可执行文件）
+python acp-deviceid.py --config <syncthing-home>/config.xml   # 打印本机 Device ID（不依赖 Syncthing 可执行文件）
 ```
+
+`<syncthing-home>` = Syncthing 配置目录（含 `config.xml`）：Windows 例 `%USERPROFILE%\acp-home\syncthing`、Linux/macOS 例 `~/.config/syncthing`。
+**先启动一次 Syncthing**（生成本机身份，目录里出现 `cert.pem` / `config.xml`）再跑上面这条；**别直接抄不带 `--config` 的裸命令** ——
+它只在几个固定默认路径里找 `cert.pem`，配置目录不在默认位置（本项目就不在）时会打印「未找到 cert.pem」。
 
 要点（照做就行）：
 
 1. **双向添加设备 ID**：A 把 ID 给 B、B 加 A 之后，**A 侧也要把 B 加回来**。只加一边的典型症状是一直 `Hello EOF`。
 2. **共享目录自选**（下称 `<shared-dir>`），两台机各指各自本地路径；双机建议 **Folder ID 起同一个名字**，便于排查。
-3. **把仓库里的 `.stignore` 放进 `<shared-dir>` 根** —— 挡掉 `~syncthing~*` / `*.tmp`，以及冲突副本 `*.sync-conflict-*`（结尾也是 `.json`，不挡会被当成信件扫到）。
+3. **先加文件夹，再放 `.stignore`**（顺序不能反）：在 Syncthing 里把 `<shared-dir>` 加成 Folder **之后**，再把仓库里的 `.stignore` 拷进 `<shared-dir>` 根 —— 挡掉 `~syncthing~*` / `*.tmp`，以及冲突副本 `*.sync-conflict-*`（结尾也是 `.json`，不挡会被当成信件扫到）。反过来的话，Syncthing 可能先把 `.stignore` 当普通文件同步出去、**忽略规则不生效**；放好后**去 Syncthing 界面确认这个文件夹的「忽略模式」已识别到这几条规则**才算生效。
 4. **共享目录别混放大文件**：大文件另开一个目录，信箱只放小消息。
 
 # 第三步：建身份 + 带外核对指纹
@@ -62,6 +66,10 @@ python acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> 
 ```
 
 占位符按平台替换：Windows 例 `--home D:\acp-home --root D:\ACP-Shared`；Linux / macOS 例 `--home ~/acp-home --root ~/acp-shared`。
+
+**`trust` 的前提（顺序别抢）**：`trust --agent <对方agent>` 会去读 `<shared-dir>/peers/<对方agent>.json`（**对方的名片**）。
+所以对方**必须先 `init`**，且名片**已经通过 Syncthing 同步过来** —— 也就是**等「双向加设备 ID」成功、共享目录真的开始同步之后**再 `trust`。
+名片到位时指纹不符会被直接拒；**名片还没到时 `trust` 不会替你核对**（照你报的指纹记下），所以指纹**必须来自带外渠道**（当面 / 口头），别猜、别从网上抄。
 
 三条必守：
 
@@ -89,10 +97,10 @@ python acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
 | `acp.py ... send --reply-to <msg_id> ...` | 回信（自动 `hops+1`） |
 | `acp.py ... inbox` | 列出收件箱（加 `--all` 含非 ok） |
 | `acp.py ... ready` | 只列**真正可执行**的消息（受 STOP 与放行票约束） |
-| `acp.py ... send` 的 `--reply` | `none` / `ack` / `answer`，标签落在信封里，收方不用读正文就能过滤 |
-| `acp.py ... digest` | 把待处理消息压成一屏 —— **省 token 的收信方式** |
-| `acp.py ... ack <msg_id>` | 确认已处理（消耗放行票） |
-| `acp.py ... watch --loop --interval 3` | 常驻投递（只搬文件、不调模型，挂机不烧 token） |
+| `acp.py ... send` 的 `--reply` | `none` / `ack` / `answer`，**只是个省 token 的信封标签**（收方不用读正文就能过滤）；**它不会自动回执** —— 回执仍要对方主动发 |
+| `acp.py ... digest` | 把待处理消息压成一屏 —— **省 token 的收信方式**（默认只显示最近 **30** 条，`--limit` 可调） |
+| `acp.py ... ack <msg_id>` | 确认已处理 = **结案**：投递状态改 `done`、**作废放行票**、从 `digest` 消失；**只对 `ok` 状态有效**，`untrusted` / `expired` 等一律拒绝 |
+| `acp.py ... watch --loop --interval 3` | 常驻投递（只搬文件、不调模型，挂机不烧 token）；会把见过的消息记进 `<home>/state/seen.json` |
 | `acp.py ... audit` | 校验并查看哈希链审计 |
 | `python selftest.py` | 离线跑一整套自测（闸门 / 刹车 / 伪造放行票 / 坏消息隔离），不需要网络 |
 | `python acp_net.py --syncthing-home <syncthing-home> status` | 看网络档位 + 实际走直连还是中继 |
@@ -106,9 +114,30 @@ python acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
 - 开机自启：Windows 任务计划程序（登录触发）；Linux `systemd --user`（或 `crontab @reboot`）；macOS `launchd`。
 - 写消息文件 / Syncthing 同步 / `watch` 收信落盘 **都不耗 token**（`watch` 进程**零网络连接**，源码里没有任何 HTTP 客户端）；**唯一耗点是"自动叫模型处理"，而本程序不提供这个动作**。
 
+另外两条要知道的：**`watch` 会写 `<home>/state/seen.json`**（记"见过哪些消息"，**7 天后过期**）—— 判重就靠它，**删掉 `state/` 会让旧信重新投一遍**；
+Linux 想开机自启又没有现成文件，可照下面这份 `systemd --user` 模板（**本仓库不提供现成 unit，请自己落到 `~/.config/systemd/user/acp-watch.service` 并按你的路径改**）：
+
+```ini
+[Unit]
+Description=ACP-lite watch (deliver only, never calls a model)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/acp-lite/acp.py --home %h/acp-home --root %h/acp-shared watch --loop --interval 3
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+启用：`systemctl --user daemon-reload && systemctl --user enable --now acp-watch`；要**开机免登录也常驻**再加 `loginctl enable-linger <你的用户名>`。
+
 # 第六步（可选）：跨主机 SSH 唤醒
 
-本项目**不内置**唤醒通道（`watch` 永不调模型），但**已实测可用**（SSH 直连，2026-10-14 / 10-15，5 次闭环全过）。
+本项目**不内置**唤醒通道（`watch` 永不调模型），但**已实测可用**（SSH 直连，2026-10-14 / 10-15，5 次闭环全过）——
+**在我们这套环境、这 5 次里**如此；换环境不保证同样顺利（DSH 那条见 §一 Q9）。
 被唤醒的那台机器装 OpenSSH 服务端即可，22 端口只对本网段开：
 
 ```powershell
@@ -173,12 +202,13 @@ A: **不是。** 没有商店、没有安装包、**没有卸载按钮**，**这
 A: 分两层。**收信**：和 Syncthing 共享同一个 `<shared-dir>`，`acp.py` 只管读写文件，不需要常驻服务。
 **唤醒**：跨机走 SSH，命令里必须 **`-s workspace-write`** 并把**每个**目标目录 `--add-dir` 进去 ——
 `D:\SharedFiles`（文档）、`D:\ACP-Shared`（信箱）、**ACP home（最容易漏，不给写权就是"信发了、账没记"）**。
-启动横幅会打印实际可写根，可当硬证据。
+启动横幅会打印实际可写根，可当硬证据。**完整唤醒命令见第六步**（本机是 Windows 时，先按 Q3 登上去）。
 
 **Q2: DSH 怎么连？**
 A: **DSH 没有 `--add-dir`**，可写根写死为"工作区 + `/tmp` + 系统临时目录"，没有扩展入口，只能
 **整机放权**：唤醒时用**同一个进程**设 `DSH_PERMISSION_MODE=danger-full-access`，并**换一个干净的工作目录**
 （本机固定用 `D:\LLM\ACP-lite\_dsh-wake`）。两句缺一不可 —— 少了档位写不出去，目录脏了命令在沙箱准备阶段就起不来。
+**完整唤醒命令见第六步**（本机是 Windows 时，先按 Q3 登上去）。
 
 **Q3: 怎么通过 SSH 登上去？**
 A: **加设备 → 装服务端 → 打洞 → 登录**，四小步：
@@ -203,6 +233,14 @@ ssh-copy-id <对端用户名>@<对端局域网IP>
 ssh <对端用户名>@<对端局域网IP> "hostname && date"
 ```
 
+**方向先讲清**：第六步的场景是 **Linux（发起方）→ Windows（被唤醒方，Win11）**，上面 `ssh-copy-id` 是 **Linux / macOS** 的写法。
+**Windows 原生 OpenSSH 里没有 `ssh-copy-id`** —— Windows 当发起端时，在 `cmd` 里用等价命令：
+
+```cmd
+ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519 -N ""
+type %USERPROFILE%\.ssh\id_ed25519.pub | ssh <对端用户名>@<对端局域网IP> "cat >> .ssh/authorized_keys"
+```
+
 - **别搞混两套标识**：Syncthing 的 Device ID 是**机器级**（一台机一个，`python acp-deviceid.py` 可算），
   ACP 的 agent 指纹是**身份级**（每个 agent 各一个）。
 - 登上去以后要**唤醒某台机器**，命令见 **第六步**；SSH 只负责"敲门"，账本仍归 ACP。
@@ -219,6 +257,8 @@ A: **SSH 只递指针** —— 传一条消息，内容是"去读 `<绝对路径
 **Q5: `acp.py --root` 能省吗？**
 A: **不能省。** 省略时默认写 `<home>/shared`（不是群共享目录），**退出码 0、没有任何报错**，信却落在
 本机私有目录、群里谁也看不见。发信 / 回信一律显式写 `--root <shared-dir>`；判据 = `outbox/<收件 agent>/` 里真有文件。
+**`--home` 同样有默认值**（`~/.acp-personal`）：两个默认值叠加最能骗人 —— `--home` 一漏，`--root` 也跟着落到
+`~/.acp-personal/shared`，信照样离群。所以**两个都显式写**。
 
 **Q6: 中文正文 / 中文提示词怎么传？**
 A: **别走命令行参数**（`cmd` / PowerShell 把 UTF-8 当 GBK 读，收到形如 `鎶婅繖鍙ヨ瘽…` 的乱码；非交互 SSH
@@ -301,6 +341,9 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
 |---|---|
 | `none` / `read` | 自动可做 |
 | `write` / `send` / `pay` / `delete` | **必须由人签一张一次性放行票** |
+
+**硬约束**：`--requires write/send/pay/delete` 时**必须同时给 `--action exec`**。`--requires` 不是 `none`、`--action`
+还是默认的 `infer`，`send` 会**直接报「语义矛盾」拒绝**（`infer` 只用于理解与回应，不可能去付款 / 发送 / 删除）。
 
 ```bash
 python acp.py ... userkey                 # 建 L2 人密钥（口令加密，只存本机，只你有口令）
