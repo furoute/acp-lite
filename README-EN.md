@@ -472,3 +472,47 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immed
 - This program **calls no model** and does not decide "whether to execute" for you; the agents themselves are not addressable -- **what is addressable is the machine**, and identity is held by the post office on its behalf.
 - **It guarantees "delivery", not "waking up"**: this project **ships no wake-up channel of its own, but a wake-up has been verified working** (same-host CLI calls / cross-host SSH wake-up,
   commands in step 6), and **it is not part of ACP-lite itself**; if the peer is off, or has no `watch` running, your letter just queues in its mailbox.
+
+### I. Pushing to GitHub over SSH (recommended)
+
+On Windows, pushing over HTTPS can crash in `git-remote-https` or block on a `schannel`
+credential prompt (`SEC_E_NO_CREDENTIALS`). SSH push bypasses that component, works for
+unattended pushes after a one-time setup, and keeps the private key on the local machine.
+
+1. **Generate a key**: use a separate key for each machine and each agent; never share a
+   private key. Replace `<name>` and `<host>` with your own identifiers:
+
+   ```bash
+   ssh-keygen -t ed25519 -C "<name>@<host>" -f ~/.ssh/id_ed25519_<name> -N ""
+   ```
+
+2. **Add the public key**: inspect the generated `.pub` file, then add it to GitHub under
+   **Settings → SSH and GPG keys → New SSH key**. Only the repository owner can do this;
+   an agent cannot add a key to the GitHub account. Use `<name>@<host>` as the Title so
+   the key can be identified and revoked independently later.
+
+3. **Verify authentication** with the new private key:
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519_<name> -o IdentitiesOnly=yes -T git@github.com
+   ```
+
+   Success reports `Hi <user>! You've successfully authenticated...`. Exit code 1 is
+   expected for this check.
+
+4. **Switch the remote to SSH**:
+
+   ```bash
+   git remote set-url origin git@github.com:<owner>/<repo>.git
+   ```
+
+Cautions:
+
+- Never share or commit a private key. Give only the `.pub` public key to the repository
+  owner.
+- When several machines maintain the same branch, run `git fetch` before pushing and
+  compare with the remote. If Git reports `! [rejected] ... (fetch first)`, run
+  `git pull --rebase` and push again.
+- A restricted environment may block outbound SSH to GitHub. As a special case, route
+  through a local proxy to `ssh.github.com:443`; configure that command for the
+  environment and never put proxy credentials in the repository.

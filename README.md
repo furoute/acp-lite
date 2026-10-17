@@ -449,3 +449,42 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
 - 本程序**不调用任何模型**，也不替你决定"要不要执行"；Agent 本身不可寻址，**可寻址的是机器**，身份由邮局代持。
 - **能保证"送到"，不保证"叫醒"**：本项目**不内置唤醒通道，但已实测可用**（同机 CLI 互调 / 跨机 SSH 唤醒，
   命令见第六步），**它不是 ACP-lite 自带的**；对端没开机、或没挂 `watch` 时，你的信就只是在信箱里排队。
+
+### I. 用 SSH 推送 GitHub（推荐）
+
+在 Windows 上用 HTTPS 推送时，`git-remote-https` 可能因 `schannel` 凭证问题崩溃或弹出
+`SEC_E_NO_CREDENTIALS`，导致无人值守的推送卡住。SSH 推送不经过这个组件，配置一次后可长期使用，
+私钥也始终只留在本机。
+
+1. **生成密钥**：每台机器、每个 agent 分别使用一把独立密钥，不要共用私钥。将 `<名字>` 和
+   `<主机名>` 换成自己的标识：
+
+   ```bash
+   ssh-keygen -t ed25519 -C "<名字>@<主机名>" -f ~/.ssh/id_ed25519_<名字> -N ""
+   ```
+
+2. **添加公钥**：先查看生成的 `.pub` 公钥文件，再把它添加到 GitHub 的
+   **Settings → SSH and GPG keys → New SSH key**。只有仓库 owner 能完成这一步；agent 不能自行
+   给 GitHub 账户添加密钥。建议用 `<名字>@<主机名>` 作为 Title，便于日后区分和单独撤销。
+
+3. **验证认证**：使用刚生成的私钥测试连接。
+
+   ```bash
+   ssh -i ~/.ssh/id_ed25519_<名字> -o IdentitiesOnly=yes -T git@github.com
+   ```
+
+   出现 `Hi <用户>! You've successfully authenticated...` 即成功；该命令以退出码 1 结束是正常的。
+
+4. **切换远端地址**：把 HTTPS 地址改成 SSH 地址。
+
+   ```bash
+   git remote set-url origin git@github.com:<owner>/<repo>.git
+   ```
+
+注意事项：
+
+- 私钥绝不外发、绝不提交到仓库；只把 `.pub` 公钥交给仓库 owner 添加。
+- 多台机器同时维护同一分支时，推送前先 `git fetch` 并比对远端；遇到
+  `! [rejected] ... (fetch first)` 时先 `git pull --rebase`，再推送。
+- 受限环境可能禁止直接访问 GitHub 的 SSH 端口。作为特殊情况，可通过本机代理转发到
+  `ssh.github.com:443`；具体代理命令按运行环境配置，不要把代理凭据写进仓库。
