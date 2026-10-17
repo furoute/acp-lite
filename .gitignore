@@ -1,0 +1,17 @@
+# Python 构建产物（含编译期绝对路径，禁止入库）
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行期/同步期临时物
+*.tmp
+~syncthing~*
+*.sync-conflict-*
+
+# 本机私有
+acp-config.cmd
+mail.json
+mail.json.bak
+identity.json
+trusted.json
+userkey.json

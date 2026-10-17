@@ -1,0 +1,7 @@
+*.tmp
+~syncthing~*
+.stfolder
+.stversions
+*.sync-conflict-*
+__pycache__/
+*.pyc
