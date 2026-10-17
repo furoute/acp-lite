@@ -461,7 +461,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immed
   Swedish non-profit Syncthing Foundation together with the community). **We did not write the sync layer and we claim no originality
   over it** -- our thanks go to the Syncthing project and its maintainers. All we added is a thin layer of **signed envelopes + hash-chained audit**.
 - **Runtime dependencies**: Python 3.9+, `cryptography`, Syncthing (plus OpenSSH if you want cross-host wake-ups, see step 6).
-- This project is released under **MIT** (see `LICENSE`); the English attribution notice is in [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md).
+- This project is released under **MIT** (see `LICENSE`); attribution notice: **the Chinese notice is above**, the English one is in [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md).
 
 ### H. Boundaries and disclaimers (stated honestly)
 

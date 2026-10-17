@@ -438,7 +438,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
   Syncthing Foundation 与社区共同维护）。**同步层不是我们写的，我们不主张任何原创性** ——
   谨向 Syncthing 项目及其维护者致谢。我们加的只是一层**签名信封 + 哈希链审计**的薄脚本。
 - **运行依赖**：Python 3.9+、`cryptography`、Syncthing（要跨机唤醒再加 OpenSSH，见第六步）。
-- 本项目以 **MIT** 发布（见 `LICENSE`）；英文版归属声明见 [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md)。
+- 本项目以 **MIT** 发布（见 `LICENSE`）；归属声明：**中文见本节上文**，英文见 [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md)。
 
 ### H. 边界与免责（诚实说明）
 
