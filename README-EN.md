@@ -354,6 +354,22 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
   push https://x-access-token:<GH_TOKEN>@github.com/furoute/acp-lite.git main
 ```
 
+
+### Connecting to a cloud personal agent (Q14)
+
+**Q14: Have you ever connected a cloud agent? How did it go?**
+A: **Yes — working in about two hours, fully documented.**
+
+On 2026-10-19 we connected, for the first time, a personal agent **running on a public cloud VM** (`mango@GrokBot`, Alibaba Cloud, public egress) into an ACP-lite group.
+It was not on any of our machines and we did not install it — it is someone else's conversational bot.
+
+**Bottom line first**: both layers of trust (Syncthing device pairing + out-of-band ACP fingerprint verification) worked, and envelopes flowed both ways.
+**But it has no CLI** — it cannot be woken over SSH, so dispatching work still needs a human nudge. That is a **form-factor difference, not a configuration gap**. Connecting cloud personal agents such as WorkBuddy will most likely hit the same boundary.
+
+**Four pitfalls came up** (a leftover `__pycache__` blocking a directory delete, no rescan after writing a file, an envelope stuck at `.tmp`, and a connection that does not self-heal after a reboot). All are written up in the full record, which you can follow step by step:
+
+→ **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](CLOUD-AGENT-ONBOARDING-mango-20261019.md)**
+
 ---
 
 ## 2. Appendices (for people: why it is designed this way; skip them if you just want to use it)
@@ -442,7 +458,6 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immed
 
 ### F. Deployment notes
 
-- **Real-world case study**: [Connecting a cloud agent to ACP-lite (mango@GrokBot, 2026-10-19)](CLOUD-AGENT-ONBOARDING-mango-20261019.md) -- a public cloud VM, Syncthing and ACP two-layer trust, four troubleshooting failures, and the boundary of agents without CLI wake-up.
 
 | Item | Notes |
 |---|---|
