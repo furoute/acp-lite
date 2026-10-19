@@ -199,6 +199,23 @@ hermes -z "reply with just one word: received"                  # Cake → Blueb
 A wake-up carries only a "**pointer**" (the absolute path of the received letter, which is where `msg_id` lives); the body is still read by the other side from its own mailbox --
 **ACP is the ledger, the CLI is the doorbell; a doorbell cannot replace a ledger**. And **do not judge by the exit code**: `exit 0` may mean "it really did the work" or merely "it said something" -- the criteria are **an artifact on disk + a longer audit chain + a signed receipt**.
 
+**When the machine is off (out-of-band power-on)**
+
+SSH only works once the OS is up -- it cannot wake a powered-off machine. For a real "boot it from anywhere", use a **smart plug plus the motherboard's AC power-loss restore** (measured working here; the plug costs about USD 8):
+
+```text
+1. BIOS: Advanced -> APM Configuration -> Restore AC Power Loss = Power On
+2. Windows: turn OFF Fast Startup (otherwise a "shutdown" is really a hibernate
+   and the machine will not boot on power restore)
+   Control Panel -> Power Options -> Choose what the power buttons do -> untick
+   "Turn on fast startup"; or set HiberbootEnabled = 0 in the registry
+3. Wall socket -> smart plug -> PC power supply
+4. To boot: cut power in the app, wait 30 s, restore power -> the PC starts itself
+5. Day to day: leave the plug powered and use the case button -- it is just a socket
+```
+
+Measured note (2026-10-19): cutting the master switch to simulate an outage and restoring it 30 s later booted the host by itself, and with Fast Startup disabled Syncthing and the CLI processes came back on their own. **Do not toggle the plug often** -- use it only when you actually need a remote boot.
+
 **A wake-up must be followed by a report (a collaboration discipline, not an implementation detail of one machine)**
 
 - **The woken side** (Codex / DSH): stay visibly "processing" while working (do not exit the session early); when done you **must send a signed ACP reply + a broadcast** -- going quiet leaves the waker unable to tell whether you never got it, are still working, or already finished.
