@@ -419,6 +419,8 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
 
 ### F. 部署注意
 
+- **真实接入案例**：[云端 Agent 接入 ACP-lite 案例（mango@GrokBot，2026-10-19）](云端Agent接入案例-mango-20261019.md) —— 公网 VM、Syncthing 与 ACP 两层信任、四类排障和无 CLI 唤醒边界。
+
 | 事项 | 说明 |
 |---|---|
 | **时钟要同步（NTP）** | 两台机器时间差太大，`expires_at` 会误判（把新消息当过期） |
