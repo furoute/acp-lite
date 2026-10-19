@@ -16,14 +16,15 @@ Once your agent has read this document, it can set the same thing up again on yo
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
 > The diagram is an example fleet (two hosts, two agents each) -- substitute your own names; the three
 > nicknames in it, **Blueberry (Hermes)**, **Cake (OpenClaw)** and **Rongmao (Muse)**, were **picked by
-> my daughter** (Tian Tian). 😄
+> my daughter**. 😄
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
 > When citing it, please use the full name "ACP-lite (Agent Connect Personal)".
 
-**How to read this**: the body is **step-by-step** -- first do this, then do that, each step giving **only what
-to do plus the commands to copy as they are**. When something breaks, look at **FAQ "1. Common questions"**
+**How to read this**: the **primary reader of this document is an AI agent** -- the body is organised as
+"what to do -> the command to copy -> the pass check", so every step can be executed and verified on the spot.
+A human only needs to hand the repository link to the agent. When something breaks, look at **FAQ "1. Common questions"**
 first (how to connect, how to log in, which pitfalls we hit); for "why is it designed this way" see
 **"2. Appendices"** -- skip them entirely if you just want to use it.
 Placeholders: `<home-dir>` this host's **private** directory | `<shared-dir>` the directory the two machines
@@ -76,7 +77,7 @@ python acp.py --home <home-dir> --root <shared-dir> status
 python acp.py --home <home-dir> --root <shared-dir> trust --agent <peer-agent> --fingerprint xxxx-xxxx-xxxx-xxxx
 ```
 
-Replace the placeholders per platform: on Windows, e.g. `--home D:\acp-home --root D:\ACP-Shared`;
+Replace the placeholders per platform: on Windows, e.g. `--home %USERPROFILE%\acp-home --root %USERPROFILE%\acp-shared`;
 on Linux / macOS, e.g. `--home ~/acp-home --root ~/acp-shared`.
 
 **What `trust` requires (do not jump the order)**: `trust --agent <peer-agent>` reads
@@ -173,21 +174,51 @@ New-NetFirewallRule -Name OpenSSH-Server-In-TCP-LAN -DisplayName 'OpenSSH Server
 sudo apt install openssh-server        # macOS ships OpenSSH
 ```
 
+Before waking anything, run `python acp.py --home <acp-home> --root <shared-dir> ready`; **if `STOP` exists, do not wake** -- the brake outranks the task.
+
 Wake-up commands (the prompt goes **through a file + stdin**, so neither Chinese text nor special characters get mangled by the shell):
 
 ```cmd
 rem Wake Codex (the sandbox level must make the target directories writable -- see FAQ Q1)
-codex exec -s workspace-write --skip-git-repo-check -C D:\_wake ^
-  --add-dir D:\SharedFiles --add-dir D:\ACP-Shared --add-dir D:\LLM\ACP-lite\home ^
+if not exist "%TEMP%\codex-wake" mkdir "%TEMP%\codex-wake"
+codex exec -s workspace-write --skip-git-repo-check -C "%TEMP%\codex-wake" ^
+  --add-dir "<shared-docs>" --add-dir "<shared-dir>" --add-dir "<acp-home>" ^
   - < prompt.txt
 ```
 
+Save the following as `wake-dsh.cmd` next to `prompt.txt`, then run the script itself:
+
 ```cmd
-rem Wake DSH (the level environment variable must live in the same process as dsh -- see FAQ Q2)
+@echo off
+setlocal
 set "DSH_PERMISSION_MODE=danger-full-access"
-cd /d D:\LLM\ACP-lite\_dsh-wake
-dsh --profile headless - < prompt.txt
+set "PROMPT_FILE=%~dp0prompt.txt"
+if not exist "%PROMPT_FILE%" (echo [FAIL] prompt.txt not found & exit /b 2)
+if not exist "%TEMP%\dsh-wake" mkdir "%TEMP%\dsh-wake"
+cd /d "%TEMP%\dsh-wake"
+rem the bin.js path follows `npm root -g`; on Windows it defaults to %APPDATA%\npm\node_modules
+node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
+
+**One character off in the environment variable and the whole chain breaks**
+
+```cmd
+WRONG: set "DSH_PERMISSION_MODE=danger-full-access "    <- trailing space inside the quotes
+RIGHT: set "DSH_PERMISSION_MODE=danger-full-access"      <- exact value
+```
+
+What happens (measured symptom): `dsh` validates the level literally -> modules do not activate -> the `pwsh` tool stays pending -> startup fails with `0xC0000142`.
+Pass check: `echo [%DSH_PERMISSION_MODE%]` must print `[danger-full-access]` -- a space before `]` means it is wrong.
+
+**Five pitfalls: symptom -> root cause -> do this -> pass check**
+
+| # | What you see | Root cause | Do this | Pass check |
+|---|---|---|---|---|
+| 1 | `pwsh` is missing, or is 5.1 | DSH's pwsh tool needs PowerShell 7; Windows ships 5.1 | Install PowerShell 7 and put `pwsh` on PATH | `pwsh -v` prints `7.x` |
+| 2 | Startup fails with `0xC0000142`; pwsh tool pending | The level value has a trailing space, so the schema's literal check fails | Use the exact value from the WRONG / RIGHT pair above | `echo [%DSH_PERMISSION_MODE%]` prints `[danger-full-access]` |
+| 3 | prompt.txt exists, yet "file not found" | The script `cd`s first, then `< prompt.txt` is a stale relative path | Resolve the prompt to an absolute path with `%~dp0` **before** `cd` | `if not exist "%PROMPT_FILE%" exit /b 2` never fires |
+| 4 | The variable is set but dsh cannot see it (silent no-op) | The variable is not in the same process as dsh: `cmd /c "set X=Y && dsh"` chaining, or a `dsh.cmd` wrapper in between | In one `.cmd`, `set` then call `node ...\bin.js` directly, bypassing `dsh.cmd` | Have the prompt print `$env:DSH_PERMISSION_MODE`; it must echo `danger-full-access` |
+| 5 | The same `dsh` behaves / configures differently than expected | PATH holds two `dsh.cmd` files -- the desktop build (runs `.exe`) and the npm global one (runs `bin.js`) -- each with its own config dir | `where dsh` and read the first hit; for determinism hard-code `node ...\bin.js` in the template | The config dir / version in the startup banner matches what you expect; the two coexist without conflict, and only `resume` can lose the write race |
 
 ```bash
 # Two agents on the same host can also call each other over CLI, in both directions
@@ -197,7 +228,15 @@ hermes -z "reply with just one word: received"                  # Cake → Blueb
 ```
 
 A wake-up carries only a "**pointer**" (the absolute path of the received letter, which is where `msg_id` lives); the body is still read by the other side from its own mailbox --
-**ACP is the ledger, the CLI is the doorbell; a doorbell cannot replace a ledger**. And **do not judge by the exit code**: `exit 0` may mean "it really did the work" or merely "it said something" -- the criteria are **an artifact on disk + a longer audit chain + a signed receipt**.
+**ACP is the ledger, the CLI is the doorbell; a doorbell cannot replace a ledger**.
+
+**Acceptance: all three must hold, and the exit code is not one of them.**
+
+1. **Artifact on disk**: `dir <artifact>` lists a file, size > 0, timestamp later than this wake-up.
+2. **Audit chain grows**: `python acp.py --home <acp-home> --root <shared-dir> audit` gains one entry, and the newest hash matches.
+3. **Signed receipt**: a reply appears under `outbox/<your-agent>/` and `verify` passes.
+
+`exit 0` may merely mean "it said something": no artifact, no ledger entry, no reply = it did not do the work.
 
 **When the machine is off (out-of-band power-on)**
 
@@ -251,12 +290,13 @@ There is exactly one correct way to use it: **hand the repository link to your c
 **Q1: How does Codex connect?**
 A: Two layers. **Receiving**: share the same `<shared-dir>` with Syncthing; `acp.py` only reads and writes files, so no resident service is needed.
 **Waking up**: over SSH across hosts, the command must use **`-s workspace-write`** and add **every** target directory with `--add-dir` --
-`D:\SharedFiles` (documents), `D:\ACP-Shared` (the mailbox), and **the ACP home (the easiest one to miss: without write access you get "the letter was sent, the ledger was not written")**.
+`<shared-docs>` (documents), `<shared-dir>` (the mailbox), and **`<acp-home>` (the easiest one to miss: without write access you get "the letter was sent, the ledger was not written")**.
 The startup banner prints the effective writable roots and can be used as hard evidence. **The full wake-up command is in step 6** (if this host is Windows, log in per Q3 first).
 
 **Q2: How does DSH connect?**
-A: **DSH has no `--add-dir`**: its writable roots are hard-wired to "the workspace + `/tmp` + the system temp directory", with no extension hook, so you must **hand over the whole machine**: at wake-up time set `DSH_PERMISSION_MODE=danger-full-access` **in the same process**, and **switch to a clean working directory** (we always use `D:\LLM\ACP-lite\_dsh-wake`). Both are required -- without the level it cannot write anything, and with a dirty directory the command fails to start already in the sandbox preparation stage.
-**The full wake-up command is in step 6** (if this host is Windows, log in per Q3 first).
+A: **DSH has no `--add-dir`**: its writable roots are hard-wired to "the workspace + `/tmp` + the system temp directory", with no extension hook, so you must **hand over the whole machine**: at wake-up time set `DSH_PERMISSION_MODE=danger-full-access` **in the same process**, and **switch to a clean working directory**
+(e.g. `%TEMP%\dsh-wake`; do not share a sandbox directory with another agent). Both are required -- without the level it cannot write anything, and with a dirty directory the command fails to start already in the sandbox preparation stage.
+**The copyable template, the WRONG / RIGHT variable pair, and the five pitfalls with pass checks are in step 6** (that is the single source of truth; this question only states the principle -- if this host is Windows, log in per Q3 first).
 
 **Q3: How do I log in over SSH?**
 A: **Add the device → install the server → punch through → log in**, four small steps:
@@ -326,8 +366,8 @@ the symptom is **silent zero output** (no error, nothing on disk).
 **Q9: After a wake-up, DSH is "hog-tied" and reports `SetNamedSecurityInfoW failed Win32 5`?**
 A: Setting `DSH_PERMISSION_MODE=danger-full-access` **alone is not enough** -- it also needs a **clean working directory**:
 a dirty directory cannot have its ACL granted (`grantWrite(<dir>)` is refused, Win32 5 = access denied), and the command
-**fails to start already in the sandbox preparation stage**. Wake it again from a clean directory (we set DSH's cwd to
-`D:\LLM\ACP-lite\_dsh-wake`). This one **does not reproduce reliably** -- don't advertise it as "always breaks".
+**fails to start already in the sandbox preparation stage**. Wake it again from a clean directory (give DSH its own
+clean cwd such as `%TEMP%\dsh-wake`; do not share it with another agent). This one **does not reproduce reliably** -- don't advertise it as "always breaks".
 
 **Q10: Does having the desktop app open interfere with CLI wake-ups?**
 A: **No** (measured): the desktop app and the CLI wake-up are **independent sessions** with no write conflict (with 5 DSH
