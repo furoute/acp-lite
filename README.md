@@ -13,13 +13,13 @@
 
 > 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 图里是一个示例舰队（两台主机、每台两个 agent），换成你自己的名字即可；图中的
-> **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)** 三个代号，是**恬甜起的名字**（我女儿）。😄
+> **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)** 三个代号，是**我女儿起的名字**。😄
 >
 > **不混淆声明**：本项目与 Zed 的 *Agent Client Protocol*、OpenAI+Stripe 的
 > *Agentic Commerce Protocol*、IBM 已归档的 *Agent Communication Protocol*
 > **没有任何关系**。对外引用时请带上全称 "ACP-lite (Agent Connect Personal)"。
 
-**怎么读**：正文是**步骤化的** —— 第一步做什么、第二步做什么，每步**只写做什么 + 照抄的命令**。
+**怎么读**：本文的**第一读者是 AI Agent** —— 正文按「做什么 → 照抄命令 → 判据」组织，每一步都能直接执行、就地验收；人类只需把仓库链接交给 agent。
 遇到问题先查 **一、常见问题（FAQ）**（怎么连、怎么登、踩过哪些坑）；想了解"为什么这么设计"再看 **二、附录**，照着用可以一眼不看。
 占位符：`<home-dir>` 本机**私有**目录 ｜ `<shared-dir>` 两台机**同步**的目录 ｜ `<agent>` / `<对方agent>` agent 名。
 程序版本 = 协议版本 = **0.7.0**；信封格式以 `ENVELOPE-FORMAT.md` 为准。
@@ -65,7 +65,7 @@ python acp.py --home <home-dir> --root <shared-dir> status
 python acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> --fingerprint xxxx-xxxx-xxxx-xxxx
 ```
 
-占位符按平台替换：Windows 例 `--home D:\acp-home --root D:\ACP-Shared`；Linux / macOS 例 `--home ~/acp-home --root ~/acp-shared`。
+占位符按平台替换：Windows 例 `--home %USERPROFILE%\acp-home --root %USERPROFILE%\acp-shared`；Linux / macOS 例 `--home ~/acp-home --root ~/acp-shared`。
 
 **`trust` 的前提（顺序别抢）**：`trust --agent <对方agent>` 会去读 `<shared-dir>/peers/<对方agent>.json`（**对方的名片**）。
 所以对方**必须先 `init`**，且名片**已经通过 Syncthing 同步过来** —— 也就是**等「双向加设备 ID」成功、共享目录真的开始同步之后**再 `trust`。
@@ -154,21 +154,51 @@ New-NetFirewallRule -Name OpenSSH-Server-In-TCP-LAN -DisplayName 'OpenSSH Server
 sudo apt install openssh-server        # macOS 已自带 OpenSSH
 ```
 
+唤醒前先跑 `python acp.py --home <acp-home> --root <shared-dir> ready`；**`STOP` 存在就别叫** —— 刹车优先于任务。
+
 唤醒命令（提示词**走文件 + stdin**，中文和特殊字符都不会被 shell 弄坏）：
 
 ```cmd
 rem 唤醒 Codex（沙箱档位必须让目标目录可写 —— 见一、常见问题 Q1）
-codex exec -s workspace-write --skip-git-repo-check -C D:\_wake ^
-  --add-dir D:\SharedFiles --add-dir D:\ACP-Shared --add-dir D:\LLM\ACP-lite\home ^
-  - < 提示词.txt
+if not exist "%TEMP%\codex-wake" mkdir "%TEMP%\codex-wake"
+codex exec -s workspace-write --skip-git-repo-check -C "%TEMP%\codex-wake" ^
+  --add-dir "<shared-docs>" --add-dir "<shared-dir>" --add-dir "<acp-home>" ^
+  - < prompt.txt
 ```
 
+把下面存成 `wake-dsh.cmd`，与 `prompt.txt` 放同一目录，执行脚本本身：
+
 ```cmd
-rem 唤醒 DSH（档位环境变量必须与 dsh 同进程 —— 见一、常见问题 Q2）
+@echo off
+setlocal
 set "DSH_PERMISSION_MODE=danger-full-access"
-cd /d D:\LLM\ACP-lite\_dsh-wake
-dsh --profile headless - < 提示词.txt
+set "PROMPT_FILE=%~dp0prompt.txt"
+if not exist "%PROMPT_FILE%" (echo [FAIL] prompt.txt not found & exit /b 2)
+if not exist "%TEMP%\dsh-wake" mkdir "%TEMP%\dsh-wake"
+cd /d "%TEMP%\dsh-wake"
+rem bin.js 路径以 npm root -g 为准；Windows 默认在 %APPDATA%\npm\node_modules
+node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
+
+**环境变量：差一个字符，整条链全断**
+
+```cmd
+错误：set "DSH_PERMISSION_MODE=danger-full-access "    ← 引号内含尾随空格
+正确：set "DSH_PERMISSION_MODE=danger-full-access"      ← 精确值
+```
+
+后果（实测症状）：dsh 按字面校验档位 → 模块不激活 → `pwsh` 工具 pending → 启动报 `0xC0000142`。
+判据：`echo [%DSH_PERMISSION_MODE%]` 必须回显 `[danger-full-access]` —— `]` 前多一个空格就是错的。
+
+**5 个坑：症状 → 真因 → 指令 → 判据**
+
+| # | 你会看到 | 真因 | 指令（照做） | 判据 |
+|---|---|---|---|---|
+| 1 | `pwsh` 找不到，或版本是 5.1 | DSH 的 pwsh 工具要 PowerShell 7；Windows 自带的是 5.1 | 装 PowerShell 7，确保 `pwsh` 在 PATH | `pwsh -v` 输出 `7.x` |
+| 2 | 启动即 `0xC0000142`，pwsh 工具 pending | 档位值带尾随空格，schema 按字面比对失败 | 按上面「错误 / 正确」改成精确值 | `echo [%DSH_PERMISSION_MODE%]` 得 `[danger-full-access]` |
+| 3 | prompt.txt 明明在，却报找不到文件 | 脚本先 `cd` 再 `< prompt.txt`，相对路径已失效 | `cd` 之前用 `%~dp0` 把提示词解析成绝对路径 | `if not exist "%PROMPT_FILE%" exit /b 2` 没触发 |
+| 4 | 变量设了，dsh 里却读不到（静默不干活） | 变量没和 dsh 同进程：`cmd /c "set X=Y && dsh"` 链式，或经 `dsh.cmd` 包装层转手 | 同一条 `.cmd` 里 `set` 完直接调 `node ...\bin.js`，绕过 `dsh.cmd` | 让 prompt 输出 `$env:DSH_PERMISSION_MODE`，回显 `danger-full-access` |
+| 5 | 同一个 `dsh`，行为 / 配置却对不上 | PATH 里有两个 `dsh.cmd`：桌面版自带（转 `.exe`）与 npm 全局（转 `bin.js`），配置目录各自独立 | `where dsh` 看第一条；要确定性就在模板里写死 `node ...\bin.js` | 启动横幅里的配置目录 / 版本与预期一致；两者可共存、不冲突，只有 `resume` 抢写权会失败 |
 
 ```bash
 # 同机两个 agent 也能双向 CLI 互调（换成你自己的 CLI 同理）
@@ -177,8 +207,15 @@ hermes -z "只回答两个字：收到"                  # 蛋糕 → 蓝莓（�
 ```
 
 唤醒只递"**指针**"（收信文件的绝对路径，里面才有 `msg_id`），正文仍让对方自己回信箱读 ——
-**ACP 是账本，CLI 是门铃；门铃不能替代账本**。判据**别看退出码**：`exit 0` 既可能"真干完了"、
-也可能"只说不做"，要落在**产物落盘 + 审计链增长 + 签名回执**这三样上。
+**ACP 是账本，CLI 是门铃；门铃不能替代账本**。
+
+**验收判据：三样都成立才算唤醒成功，不看退出码。**
+
+1. **产物落盘**：`dir <产物路径>` 能看到文件，大小 > 0，时间晚于本次唤醒。
+2. **审计链增长**：`python acp.py --home <acp-home> --root <shared-dir> audit` 条数 +1，最新一条 hash 对得上。
+3. **签名回执**：`outbox/<你的 agent>/` 里出现回信，且 `verify` 通过。
+
+`exit 0` 可能只是"说了话"：不落盘、不入账、不回信 = 没干。
 
 **机器没开机的时候怎么办（带外唤醒）**
 
@@ -227,14 +264,14 @@ A: **不是。** 没有商店、没有安装包、**没有卸载按钮**，**这
 **Q1: Codex 怎么连？**
 A: 分两层。**收信**：和 Syncthing 共享同一个 `<shared-dir>`，`acp.py` 只管读写文件，不需要常驻服务。
 **唤醒**：跨机走 SSH，命令里必须 **`-s workspace-write`** 并把**每个**目标目录 `--add-dir` 进去 ——
-`D:\SharedFiles`（文档）、`D:\ACP-Shared`（信箱）、**ACP home（最容易漏，不给写权就是"信发了、账没记"）**。
+`<shared-docs>`（文档）、`<shared-dir>`（信箱）、**`<acp-home>`（最容易漏，不给写权就是"信发了、账没记"）**。
 启动横幅会打印实际可写根，可当硬证据。**完整唤醒命令见第六步**（本机是 Windows 时，先按 Q3 登上去）。
 
 **Q2: DSH 怎么连？**
 A: **DSH 没有 `--add-dir`**，可写根写死为"工作区 + `/tmp` + 系统临时目录"，没有扩展入口，只能
 **整机放权**：唤醒时用**同一个进程**设 `DSH_PERMISSION_MODE=danger-full-access`，并**换一个干净的工作目录**
-（本机固定用 `D:\LLM\ACP-lite\_dsh-wake`）。两句缺一不可 —— 少了档位写不出去，目录脏了命令在沙箱准备阶段就起不来。
-**完整唤醒命令见第六步**（本机是 Windows 时，先按 Q3 登上去）。
+（如 `%TEMP%\dsh-wake`，别和别的 agent 共用沙箱目录）。两句缺一不可 —— 少了档位写不出去，目录脏了命令在沙箱准备阶段就起不来。
+**可复制模板、环境变量对照、5 个坑与判据见第六步**（那里是唯一事实源，本问只讲原则；本机是 Windows 时先按 Q3 登上去）。
 
 **Q3: 怎么通过 SSH 登上去？**
 A: **加设备 → 装服务端 → 打洞 → 登录**，四小步：
@@ -302,7 +339,7 @@ A: **只用单进程 `set`**：`set "DSH_PERMISSION_MODE=danger-full-access"` �
 **Q9: DSH 被唤醒后"手脚被捆"，报 `SetNamedSecurityInfoW failed Win32 5`？**
 A: 光设 `DSH_PERMISSION_MODE=danger-full-access` **不够**，还要一个**干净的工作目录**：脏目录的 ACL 授不了权
 （`grantWrite(<目录>)` 被拒，Win32 5 = 拒绝访问），命令在**沙箱准备阶段就起不来**。换个干净目录再唤醒即可
-（我们把 DSH 的 cwd 专设成 `D:\LLM\ACP-lite\_dsh-wake`）。这条**不是稳定复现**，别当"必挂"宣传。
+（DSH 的 cwd 要单独给一个干净目录，如 `%TEMP%\dsh-wake`，别和别的 agent 共用）。这条**不是稳定复现**，别当"必挂"宣传。
 
 **Q10: 桌面版开着，会不会影响 CLI 唤醒？**
 A: **不影响**（实测）：桌面版与 CLI 唤醒是**各自独立的会话**，没有写权冲突（DSH 桌面版 5 个进程在跑时，
