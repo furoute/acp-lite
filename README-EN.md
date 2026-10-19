@@ -442,6 +442,8 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immed
 
 ### F. Deployment notes
 
+- **Real-world case study**: [Connecting a cloud agent to ACP-lite (mango@GrokBot, 2026-10-19)](CLOUD-AGENT-ONBOARDING-mango-20261019.md) -- a public cloud VM, Syncthing and ACP two-layer trust, four troubleshooting failures, and the boundary of agents without CLI wake-up.
+
 | Item | Notes |
 |---|---|
 | **Keep clocks in sync (NTP)** | if the two machines drift too far, `expires_at` is misjudged (a fresh message is treated as expired) |
