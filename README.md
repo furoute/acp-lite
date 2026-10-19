@@ -330,6 +330,22 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
   push https://x-access-token:<GH_TOKEN>@github.com/furoute/acp-lite.git main
 ```
 
+
+### 与云端 Personal Agent 互联（Q14）
+
+**Q14: 你们接过云端 agent 吗？结果怎么样？**
+A: **接过，2 小时跑通，全程有记录。**
+
+2026-10-19，我们第一次把一个**跑在公有云 VM 上**的 personal agent（`mango@GrokBot`，阿里云，公网出口）接进了 ACP-lite 群。
+它不在我们任何一台机器上，也不是我们装的 —— 它是别人家的对话式 Bot。
+
+**结论先说**：两层信任（Syncthing 设备互加 + ACP 指纹带外核对）都跑通了，双向收发信封正常。
+**但它没有 CLI** —— 不能被 SSH 唤醒，派活还得人叫一声。这是**形态差异**，不是配置问题。以后接 WorkBuddy 这类云端 personal agent，大概率是同样的边界。
+
+**踩了 4 个坑**（含 `__pycache__` 残留导致目录删不掉、发文件后不触发重扫、信封卡 `.tmp`、重启后连接不自愈），都记在下面这份完整记录里，可直接照着走：
+
+→ **[云端 Agent 接入 ACP-lite 案例：mango@GrokBot 跨公网首接](云端Agent接入案例-mango-20261019.md)**
+
 ---
 
 ## 二、附录（给人看的：为什么这么设计；照着用可以跳过）
@@ -419,7 +435,6 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
 
 ### F. 部署注意
 
-- **真实接入案例**：[云端 Agent 接入 ACP-lite 案例（mango@GrokBot，2026-10-19）](云端Agent接入案例-mango-20261019.md) —— 公网 VM、Syncthing 与 ACP 两层信任、四类排障和无 CLI 唤醒边界。
 
 | 事项 | 说明 |
 |---|---|
