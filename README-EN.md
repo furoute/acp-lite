@@ -201,20 +201,25 @@ A wake-up carries only a "**pointer**" (the absolute path of the received letter
 
 **When the machine is off (out-of-band power-on)**
 
-SSH only works once the OS is up -- it cannot wake a powered-off machine. For a real "boot it from anywhere", use a **smart plug plus the motherboard's AC power-loss restore** (measured working here; the plug costs about USD 8):
+SSH needs the OS running, so it cannot wake a powered-off machine. For a real "boot it from anywhere", use a **smart plug plus the motherboard's AC power-loss restore** (plug costs about USD 8):
 
 ```text
 1. BIOS: Advanced -> APM Configuration -> Restore AC Power Loss = Power On
-2. Windows: turn OFF Fast Startup (otherwise a "shutdown" is really a hibernate
-   and the machine will not boot on power restore)
+2. Windows: turn OFF Fast Startup, otherwise a "shutdown" is really a hibernate
+   and the machine will not boot on power restore
    Control Panel -> Power Options -> Choose what the power buttons do -> untick
-   "Turn on fast startup"; or set HiberbootEnabled = 0 in the registry
-3. Wall socket -> smart plug -> PC power supply
-4. To boot: cut power in the app, wait 30 s, restore power -> the PC starts itself
-5. Day to day: leave the plug powered and use the case button -- it is just a socket
+   "Turn on fast startup"
+3. In the plug's app, set "power-loss behaviour" to ON (the middle option)
+   x Do NOT pick "remember": it relies on the plug's own guess at its last state,
+     which measured unreliable
+   x Do NOT pick "off": the plug then outputs nothing and the board never sees
+     AC power return
+4. Wall socket -> smart plug -> PC power supply
+5. To boot: cut power in the app, wait 30 s, restore power -> the PC starts itself
+6. Day to day: leave the plug powered and use the case button -- it is just a socket
 ```
 
-Measured note (2026-10-19): cutting the master switch to simulate an outage and restoring it 30 s later booted the host by itself, and with Fast Startup disabled Syncthing and the CLI processes came back on their own. **Do not toggle the plug often** -- use it only when you actually need a remote boot.
+Measured note (2026-10-19; three consecutive clean runs on this configuration): cutting power for 30 s and restoring it booted the host by itself. Let the power LED go fully dark before cutting power -- cutting too early logs `Kernel-Power ID 41` (unexpected loss) and the next power-on may not start. **Do not toggle the plug often** -- use it only when you actually need a remote boot.
 
 **A wake-up must be followed by a report (a collaboration discipline, not an implementation detail of one machine)**
 
