@@ -159,6 +159,16 @@ Enable it with `systemctl --user daemon-reload && systemctl --user enable --now 
 
 This project **ships no** wake-up channel of its own (`watch` never calls a model), but **a direct SSH wake-up has been verified working** (2026-10-14 / 10-15; 5 closed loops, all passed) --
 **in our setup, and in these 5 runs**; another environment is not guaranteed to go as smoothly (for the DSH caveat see FAQ Q9).
+
+**The goal is just one thing:** let machine A (say an always-on laptop) hand a task over `ssh` to a headless CLI (`dsh` / `codex`) on machine B
+(say a desktop), with the result coming back to A over ACP. **Getting that to work is enough.**
+
+**On permissions, plainly:** both machines sit on **your own LAN**, so giving `danger-full-access` at wake-up time is a deliberate
+choice, not an oversight. Therefore:
+
+- open port 22 **to the local subnet only** (the firewall rule below does exactly that) -- no port forwarding, no exposure to the internet;
+- if the machine to be woken is **on the public internet**, add real authentication (key pair + jump host / VPN) instead of copying this level;
+- file edits and deletions are **destructive** -- still ask the human first. An open permission does not mean acting without asking.
 The machine to be woken only needs an OpenSSH server, with port 22 opened to the local subnet alone:
 
 ```powershell
@@ -201,38 +211,19 @@ node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless
   --session-id "%WAKE_SESSION%" - < "%PROMPT_FILE%"
 ```
 
-**Pin one session, or every wake-up creates a new one**
-
-`--profile headless` without `--session-id` calls `agents.create(random UUID)`: every wake-up adds a session to the list.
-With `--session-id` it goes through `resolveAgent` (adopt and continue the existing session), and adds **nothing**. Put this before the `cd`:
+**Sessions: with `--session-id` it is one long conversation; without it every wake-up creates a new one**
 
 ```cmd
-rem change sessions here -- one place only; an existing DSH_WAKE_SESSION_ID wins
-if not defined DSH_WAKE_SESSION_ID set "DSH_WAKE_SESSION_ID=session-<your pinned session id>"
+rem change sessions here -- one place only (optional env override)
+if not defined DSH_WAKE_SESSION_ID set "DSH_WAKE_SESSION_ID=session-<pinned session id>"
 set "WAKE_SESSION=%DSH_WAKE_SESSION_ID%"
 ```
 
-Note: do **not** use `DSH_SESSION_ID` as that switch -- dsh injects it into child processes as "the current session id", so it gets hijacked and hits the write lock. Use another name.
+With it -> the same session continues and **nothing is added**; without it -> every wake-up creates a session that piles up under
+"Ungrouped" in the desktop app.
 
-Adoption gate (a miss is an error, **never a silent fallback to create**): the session has **no agentPreset**, is not a subagent/forked,
-has a cwd, and that cwd matches the current process -- so create the pinned session in the directory the script `cd`s into.
-
-Pass check: the "Ungrouped" count is unchanged across the wake-up and the target session's turn count goes up by one.
-The price is that a session id is a UUID nobody can read -- so **never make a human remember it; let the script hold it.**
-
-**Why sessions pile up under "Ungrouped"**
-
-A session created without `--session-id` whose cwd belongs to no registered workspace lands under "Ungrouped" in the desktop app.
-Two ways to stop the pile-up: always pass `--session-id` (recommended), or register that directory as a workspace (which only moves the pile, it does not shrink it).
-
-A separate "empty shell" case has nothing to do with this flow: clicking "New session" in the desktop app and leaving without sending anything
-leaves an entry with `title=null / turns=0` (the cache is written on `session/created`). Clean those out by those two fields.
-
-**Two ways to dispatch work -- pick one and stick to it**
-
-Through the script (recommended): `ssh <target> "D:\path\wake-dsh.cmd prompt.txt"` -- pinned session, all parameters set.
-Direct (debugging only): `dsh --profile headless --session-id <id> - < prompt.txt` -- the explicit `--session-id` is mandatory; omit it and you create.
-Mixing the two is the number one cause of a growing session list: the script's author assumes everything goes through the script, while every ad-hoc direct call leaves one more session behind.
+The session count does not need managing by hand -- let it be cleaned up; **never make a human remember a UUID, let the script hold it.**
+Note: do not name that switch `DSH_SESSION_ID` -- dsh injects it into child processes as the current session id, so it gets hijacked and hits the write lock.
 
 **One character off in the environment variable and the whole chain breaks**
 
