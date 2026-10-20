@@ -207,23 +207,41 @@ if not exist "%PROMPT_FILE%" (echo [FAIL] prompt.txt not found & exit /b 2)
 if not exist "%TEMP%\dsh-wake" mkdir "%TEMP%\dsh-wake"
 cd /d "%TEMP%\dsh-wake"
 rem the bin.js path follows `npm root -g`; on Windows it defaults to %APPDATA%\npm\node_modules
-node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless ^
-  --session-id "%WAKE_SESSION%" - < "%PROMPT_FILE%"
+node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
 
-**Sessions: with `--session-id` it is one long conversation; without it every wake-up creates a new one**
+**One wake-up = one fresh session (do not reuse a session)**
 
-```cmd
-rem change sessions here -- one place only (optional env override)
-if not defined DSH_WAKE_SESSION_ID set "DSH_WAKE_SESSION_ID=session-<pinned session id>"
-set "WAKE_SESSION=%DSH_WAKE_SESSION_ID%"
+Do not pass `--session-id` to continue one long conversation. Each task is independent, and reusing a session makes the context
+accumulate round after round: every wake-up re-reads the whole history, so **each call costs more than the last**, and "what was
+actually said this time" stops being answerable.
+
+The price is one leftover session entry per wake-up. That entry **is the audit trail**, not litter -- clean them up in batches later.
+
+**Leave a receipt after every wake-up (audit / billing / traceability)**
+
+```text
+one wake-up -> one ACP message (msg_id, signed)
+            -> one CLI session   (session id, replayable)
+            -> one receipt       (the six lines below)
 ```
 
-With it -> the same session continues and **nothing is added**; without it -> every wake-up creates a session that piles up under
-"Ungrouped" in the desktop app.
+Write it under a shared directory (e.g. `<shared-docs>/wake-log/2026-10-20-1420-<task>.md`). Six lines are enough:
 
-The session count does not need managing by hand -- let it be cleaned up; **never make a human remember a UUID, let the script hold it.**
-Note: do not name that switch `DSH_SESSION_ID` -- dsh injects it into child processes as the current session id, so it gets hijacked and hits the write lock.
+```text
+msg_id   : hermes-<host>-<date>-<time>-<hash>
+time     : 2026-10-20 14:20 +08:00
+task     : <one line>
+by       : <agent>@<host> (CLI: dsh|codex / session id)
+result   : ok | fail | partial -- <one line>
+receipt  : outbox/<agent>/<msg_id>.json (signature verifiable)
+```
+
+**Why bother**: ACP carries only the *request*, and the CLI only *executes once*. **ACP messages alone never show what was done;
+sessions alone never show whose bill it is on.** Joining them by `msg_id` gives both the audit trail and the billing anchor.
+
+Fine to skip when it is just you; **hand the project to anyone else and these six lines are mandatory** -- without them nobody
+can audit it, nobody can bill it, and nobody dares use it.
 
 **One character off in the environment variable and the whole chain breaks**
 

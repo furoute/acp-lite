@@ -187,22 +187,39 @@ if not exist "%PROMPT_FILE%" (echo [FAIL] prompt.txt not found & exit /b 2)
 if not exist "%TEMP%\dsh-wake" mkdir "%TEMP%\dsh-wake"
 cd /d "%TEMP%\dsh-wake"
 rem bin.js 路径以 npm root -g 为准；Windows 默认在 %APPDATA%\npm\node_modules
-node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless ^
-  --session-id "%WAKE_SESSION%" - < "%PROMPT_FILE%"
+node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
 
-**会话：带上 `--session-id` 就是一个长期对话，不带就每次新建**
+**一次唤醒 = 一次独立会话（不要复用会话）**
 
-```cmd
-rem 换会话只改这一处（可选环境变量覆盖）
-if not defined DSH_WAKE_SESSION_ID set "DSH_WAKE_SESSION_ID=session-<固定会话 id>"
-set "WAKE_SESSION=%DSH_WAKE_SESSION_ID%"
+别用 `--session-id` 去续接同一个会话。任务本身是独立的，复用会让上下文一轮轮累积：
+每次唤醒都要重读全部历史，**token 一次比一次贵**，而且「这次到底讲了什么」也说不清。
+
+代价是每次新建都留一条会话记录。这条记录**就是审计凭证**，不是垃圾 —— 多到一定数量再统一清。
+
+**唤醒后留一份凭证（可审计 / 可计费 / 可回溯）**
+
+```text
+一次唤醒   → 一条 ACP 消息（msg_id，签名）
+           → 一个 CLI 会话（会话 id，可回放）
+           → 一份凭证（下面的 6 行）
 ```
 
-带上 → 续接同一个会话，**一次都不新增**；不带 → 每次都新建一条，堆在桌面端「未分组」里。
+凭证落到共享目录（如 `<shared-docs>/wake-log/2026-10-20-1420-<任务>.md`），六行就够：
 
-会话多了不用管，让它自己清（见下）；**别让人记 UUID，让脚本记**。
-⚠️ 开关不要命名为 `DSH_SESSION_ID` —— 那是 dsh 注入给子进程的当前会话 id，会被劫持并撞写锁。
+```text
+msg_id   : hermes-<host>-<date>-<time>-<hash>
+时间     : 2026-10-20 14:20 +08:00
+任务     : <一句话>
+执行方   : <agent>@<host>（CLI: dsh|codex / 会话 id）
+结果     : ok | fail | partial —— <一句话>
+凭证     : outbox/<agent>/<msg_id>.json（签名可验）
+```
+
+**为什么要这一步**：ACP 只说「需求」，CLI 只负责「执行一次」。**只留 ACP 消息，人看不出它到底做了什么；
+只留会话，别人又不知道这次算谁的单。** 两者用 `msg_id` 挂上，审计和计费就都有了落点。
+
+自己一个人用可以从简；**要把项目交给别人用，这六行必须有** —— 不写清楚，别人既不敢用，也说不清钱花在哪。
 
 **环境变量：差一个字符，整条链全断**
 
