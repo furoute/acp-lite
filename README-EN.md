@@ -475,6 +475,32 @@ It was not on any of our machines and we did not install it — it is someone el
 
 → **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](CLOUD-AGENT-ONBOARDING-mango-20261019.md)**
 
+### How to split directories for an external agent (Q15)
+
+**Q15: Once an external agent is on board, how should the shared directories be laid out?**
+A: **Three layers, each its own folder. Never let an external agent share a directory with internal files.**
+
+Measured on 2026-10-20: an external agent could read every internal file (including a personal resume) because it shared `shared-files`.
+The fix is three Syncthing folders that do not nest:
+
+| folder | Holds | Visible to |
+|---|---|---|
+| `acp-shared-public` | announcements, protocol notes, collaboration rules, runbooks, templates, public name cards | internal + **every external (read-only)** |
+| `acp-shared-<peer>` | the exchange area for one external peer | internal + **that peer** (other externals cannot see it) |
+| `acp-shared` / `shared-files` | mailbox and runtime facilities / internal files | **internal only** |
+
+**Four hard constraints** (each one was learned the hard way):
+
+1. **The three folders must be independent** -- Syncthing authorises per folder x device, not per subdirectory; once the parent is shared, permissions on a child mean nothing.
+2. **The public area is not a mailbox** -- whichever directory `--root` points at, its `outbox` is visible to everyone on that root. Keep announcements and message traffic in different roots.
+3. **`outbox/<agent>/` holds only `.json`** (`cli_calls.jsonl` is a log exception); large files live in the file area and the message carries only a path.
+4. **The public area accepts a fixed extension whitelist only** -- `.md .txt .json .pdf .png`; `.cmd .ps1 .exe .py .bat .sh` never. Wake-up scripts especially must stay out: if an external party can edit one, the next wake-up runs arbitrary code.
+
+**Two things that are easy to miss:**
+
+- **Removing a share is not a recall.** The other side already has a local copy; moving the folder out only stops updates, it does not delete theirs. The design prevents the next leak, it cannot undo the last one.
+- **Changing `--root` is not the same as changing visibility.** `to` decides *who handles it*; `root` decides *who can see it*.
+
 ---
 
 ## 2. Appendices (for people: why it is designed this way; skip them if you just want to use it)
@@ -482,7 +508,8 @@ It was not on any of our machines and we did not install it — it is someone el
 ### A. The five iron rules
 
 1. **On-host behaviour is unchanged** -- the original file channel stays as it is; this program neither reads nor writes `mailbox/`.
-2. **Cross-host shares exactly one directory** -- Syncthing / Tailscale / a cloud drive / a USB stick can all serve as the transport.
+2. **Cross-host shares directories, never a whole machine** -- Syncthing / Tailscale / a cloud drive / a USB stick can all serve as the transport.
+   With a single in-group peer one directory is enough; once an external agent joins, split by the **three layers in Q15** (public / peer-specific / internal), each its own folder.
 3. **Private keys never enter the shared directory** -- `--home` is host-private; the shared directory holds only name cards and outboxes.
 4. **Receiving never calls a model** -- `watch` only writes to disk and appends to the audit log; idling burns no tokens.
 5. **Missing dependency means refuse-to-receive (fail-closed)** -- without `cryptography` on the host, cross-host messages are **rejected by default**;
