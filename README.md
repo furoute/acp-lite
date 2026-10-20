@@ -139,6 +139,16 @@ WantedBy=default.target
 
 本项目**不内置**唤醒通道（`watch` 永不调模型），但**已实测可用**（SSH 直连，2026-10-14 / 10-15，5 次闭环全过）——
 **在我们这套环境、这 5 次里**如此；换环境不保证同样顺利（DSH 那条见一、常见问题 Q9）。
+
+**目标只有一个：** 让 A 机（如常开的上网本）通过 `ssh` 把任务交给 B 机（如台式机）上的 headless CLI（`dsh` / `codex`），
+结果再经 ACP 回信落到 A 机。**能做到这一点就够了。**
+
+**关于权限，说清楚就好：** 两台机器都在**自己的局域网**内，唤醒时给 `danger-full-access`
+是刻意的选择 —— 不是安全疏忽。所以：
+
+- 22 端口**只对本网段开**（下面的防火墙规则就是这么写的），别做端口转发、别暴露到公网；
+- 如果要唤醒的是**公网上的机器**，那就得另做一层认证（私钥 + 跳板 / VPN），不要照抄这里的档位；
+- 改文件、删文件这类**破坏性操作**，仍然先问人 —— 权限放开不等于可以先斩后奏。
 被唤醒的那台机器装 OpenSSH 服务端即可，22 端口只对本网段开：
 
 ```powershell
@@ -181,38 +191,18 @@ node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless
   --session-id "%WAKE_SESSION%" - < "%PROMPT_FILE%"
 ```
 
-**固定会话：不带 `--session-id` 就每次新建一条**
-
-`--profile headless` 不传 `--session-id` 时走 `agents.create(随机 UUID)`：每唤醒一次，会话列表就多一条。
-带上 `--session-id` 则走 `resolveAgent`（领养已有会话续聊），**一次都不新增**。加在 `cd` 之前：
+**会话：带上 `--session-id` 就是一个长期对话，不带就每次新建**
 
 ```cmd
-rem 换会话只改这一处；设了 DSH_WAKE_SESSION_ID 则以环境变量为准
-if not defined DSH_WAKE_SESSION_ID set "DSH_WAKE_SESSION_ID=session-<你的固定会话 id>"
+rem 换会话只改这一处（可选环境变量覆盖）
+if not defined DSH_WAKE_SESSION_ID set "DSH_WAKE_SESSION_ID=session-<固定会话 id>"
 set "WAKE_SESSION=%DSH_WAKE_SESSION_ID%"
 ```
 
-⚠️ **不要拿 `DSH_SESSION_ID` 当这个开关** —— 那是 dsh 注入给子进程的「当前会话 id」，会被它劫持并撞写锁，另起一个名字。
+带上 → 续接同一个会话，**一次都不新增**；不带 → 每次都新建一条，堆在桌面端「未分组」里。
 
-领养门槛（不满足直接报错，**不会退化成新建**）：会话**没有 agentPreset**、不是 subagent/forked、有 cwd、
-且 cwd 与当前进程一致 —— 所以固定会话要建在脚本 `cd` 进去的那个目录里。
-
-判据：唤醒前后「未分组」条数不变，目标会话轮次 +1。
-代价是会话 ID 是一串 UUID，人看不见 —— 所以**别让人记 ID，让脚本记**。
-
-**会话为什么堆在「未分组」**
-
-不带 `--session-id` 新建的会话，cwd 不属于任何已注册 workspace 时，会全部落进桌面端「未分组」。
-要它不堆：唤醒一律带 `--session-id`（推荐），或把该目录注册成 workspace（只是换个地方堆，不减少条数）。
-
-另有一类「空壳」与本流程无关：桌面端点「新建会话」后不发消息就切走，会留下 `title=null / turns=0`
-的空条目（`session/created` 时就写了缓存）。按这两个字段定期清理即可。
-
-**派活的两种方式，选一种并固定下来**
-
-走脚本（推荐）：`ssh <target> "D:\path\wake-dsh.cmd prompt.txt"` —— 固定会话、参数齐全。
-直连（只在调试时）：`dsh --profile headless --session-id <id> - < prompt.txt` —— **必须显式带 `--session-id`**，
-漏了就是新建。两条路混用是「会话越堆越多」的头号原因：写脚本的人以为都在走脚本，可每一处临时直连都留了一条。
+会话多了不用管，让它自己清（见下）；**别让人记 UUID，让脚本记**。
+⚠️ 开关不要命名为 `DSH_SESSION_ID` —— 那是 dsh 注入给子进程的当前会话 id，会被劫持并撞写锁。
 
 **环境变量：差一个字符，整条链全断**
 
