@@ -254,7 +254,7 @@ RIGHT: set "DSH_PERMISSION_MODE=danger-full-access"      <- exact value
 What happens (measured symptom): `dsh` validates the level literally -> modules do not activate -> the `pwsh` tool stays pending -> startup fails with `0xC0000142`.
 Pass check: `echo [%DSH_PERMISSION_MODE%]` must print `[danger-full-access]` -- a space before `]` means it is wrong.
 
-**Five pitfalls: symptom -> root cause -> do this -> pass check**
+**Six pitfalls: symptom -> root cause -> do this -> pass check**
 
 | # | What you see | Root cause | Do this | Pass check |
 |---|---|---|---|---|
@@ -263,6 +263,7 @@ Pass check: `echo [%DSH_PERMISSION_MODE%]` must print `[danger-full-access]` -- 
 | 3 | prompt.txt exists, yet "file not found" | The script `cd`s first, then `< prompt.txt` is a stale relative path | Resolve the prompt to an absolute path with `%~dp0` **before** `cd` | `if not exist "%PROMPT_FILE%" exit /b 2` never fires |
 | 4 | The variable is set but dsh cannot see it (silent no-op) | The variable is not in the same process as dsh: `cmd /c "set X=Y && dsh"` chaining, or a `dsh.cmd` wrapper in between | In one `.cmd`, `set` then call `node ...\bin.js` directly, bypassing `dsh.cmd` | Have the prompt print `$env:DSH_PERMISSION_MODE`; it must echo `danger-full-access` |
 | 5 | The same `dsh` behaves / configures differently than expected | PATH holds two `dsh.cmd` files -- the desktop build (runs `.exe`) and the npm global one (runs `bin.js`) -- each with its own config dir | `where dsh` and read the first hit; for determinism hard-code `node ...\bin.js` in the template | The config dir / version in the startup banner matches what you expect; the two coexist without conflict, and only `resume` can lose the write race |
+| 6 | The wake **goes nowhere**: minutes pass with no activity, and not even an output file exists | The process was started with `Start-Process -WindowStyle Hidden` (or `cmd /c` in the background) -- when SSH disconnects, every child of that session is torn down with it | Use `schtasks /create /sc once` + `/run`; the scheduler owns the process, decoupled from the SSH session | Expect a reply within 30 s; if the output file **does not exist at all** (not 0 bytes), this is the trap |
 
 ```bash
 # Two agents on the same host can also call each other over CLI, in both directions

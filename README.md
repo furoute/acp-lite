@@ -231,7 +231,7 @@ msg_id   : hermes-<host>-<date>-<time>-<hash>
 后果（实测症状）：dsh 按字面校验档位 → 模块不激活 → `pwsh` 工具 pending → 启动报 `0xC0000142`。
 判据：`echo [%DSH_PERMISSION_MODE%]` 必须回显 `[danger-full-access]` —— `]` 前多一个空格就是错的。
 
-**5 个坑：症状 → 真因 → 指令 → 判据**
+**6 个坑：症状 → 真因 → 指令 → 判据**
 
 | # | 你会看到 | 真因 | 指令（照做） | 判据 |
 |---|---|---|---|---|
@@ -240,6 +240,7 @@ msg_id   : hermes-<host>-<date>-<time>-<hash>
 | 3 | prompt.txt 明明在，却报找不到文件 | 脚本先 `cd` 再 `< prompt.txt`，相对路径已失效 | `cd` 之前用 `%~dp0` 把提示词解析成绝对路径 | `if not exist "%PROMPT_FILE%" exit /b 2` 没触发 |
 | 4 | 变量设了，dsh 里却读不到（静默不干活） | 变量没和 dsh 同进程：`cmd /c "set X=Y && dsh"` 链式，或经 `dsh.cmd` 包装层转手 | 同一条 `.cmd` 里 `set` 完直接调 `node ...\bin.js`，绕过 `dsh.cmd` | 让 prompt 输出 `$env:DSH_PERMISSION_MODE`，回显 `danger-full-access` |
 | 5 | 同一个 `dsh`，行为 / 配置却对不上 | PATH 里有两个 `dsh.cmd`：桌面版自带（转 `.exe`）与 npm 全局（转 `bin.js`），配置目录各自独立 | `where dsh` 看第一条；要确定性就在模板里写死 `node ...\bin.js` | 启动横幅里的配置目录 / 版本与预期一致；两者可共存、不冲突，只有 `resume` 抢写权会失败 |
+| 6 | 唤醒后**石沉大海**：等几分钟毫无动静，连输出文件都不存在 | 用 `Start-Process -WindowStyle Hidden`（或 `cmd /c` 后台）起进程 —— SSH 一断，整个会话的子进程被连根拔掉 | 改用 `schtasks /create /sc once` + `/run`，进程由任务计划程序托管，与 SSH 会话解耦 | 建任务后 30 秒内应看到回信；若输出文件**压根不存在**（不是 0 字节），就是这个坑 |
 
 ```bash
 # 同机两个 agent 也能双向 CLI 互调（换成你自己的 CLI 同理）
