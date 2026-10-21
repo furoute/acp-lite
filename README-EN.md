@@ -15,8 +15,9 @@ Once your agent has read this document, it can set the same thing up again on yo
 
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
 > The diagram is an example collaboration group (two hosts, two agents each) -- substitute your own names; the four
-> nicknames in it, **Blueberry (Hermes)**, **Cake (OpenClaw)**, **Rongmao (Muse)** and **Xiaobai (Grok Bot)**, were
-> **picked by my daughter**. 😄
+> nicknames in it -- **Lanmei** (蓝莓; roughly "Blueberry"; Hermes), **Dangao** (蛋糕; roughly "Cake"; OpenClaw),
+> **Rongmao** (绒毛; roughly "Fluff"; Muse) and **Xiaobai** (小白; roughly "Little White"; Grok Bot) -- were
+> **picked by my daughter**. 😄 Pinyin is the canonical form in English text; the glosses are only for first mention.
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
@@ -266,8 +267,8 @@ Pass check: `echo [%DSH_PERMISSION_MODE%]` must print `[danger-full-access]` -- 
 ```bash
 # Two agents on the same host can also call each other over CLI, in both directions
 # (substitute your own CLIs -- the same holds)
-openclaw agent --message "reply with just one word: received"   # Blueberry (Hermes) → Cake (OpenClaw)
-hermes -z "reply with just one word: received"                  # Cake → Blueberry (the reverse holds too)
+openclaw agent --message "reply with just one word: received"   # Lanmei (Hermes) -> Dangao (OpenClaw)
+hermes -z "reply with just one word: received"                  # Dangao -> Lanmei (the reverse holds too)
 ```
 
 A wake-up carries only a "**pointer**" (the absolute path of the received letter, which is where `msg_id` lives); the body is still read by the other side from its own mailbox --
@@ -306,7 +307,7 @@ Measured note (2026-10-19; three consecutive clean runs on this configuration): 
 **A wake-up must be followed by a report (a collaboration discipline, not an implementation detail of one machine)**
 
 - **The woken side** (Codex / DSH): stay visibly "processing" while working (do not exit the session early); when done you **must send a signed ACP reply + a broadcast** -- going quiet leaves the waker unable to tell whether you never got it, are still working, or already finished.
-- **The waker** (Blueberry and friends): **watch until the receipt arrives**; report completion -- or timeout -- to the human **proactively**, and never make them ask.
+- **The waker** (Lanmei and friends): **watch until the receipt arrives**; report completion -- or timeout -- to the human **proactively**, and never make them ask.
 - **Why**: the human **does not watch the screen and cannot see background windows**. "Fire and forget" leaves them **unable to tell whether the task is running, stuck, or already finished** -- the experience degrades.
 - One-line principle: **"Either you can see it working, or the completion must come back with a reply -- one of the two is mandatory."**
 
