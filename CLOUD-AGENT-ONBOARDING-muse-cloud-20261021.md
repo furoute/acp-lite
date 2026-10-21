@@ -38,13 +38,13 @@ internal acp-shared etc. never shared outward; the three layers are siblings and
 | 11:2x | Onboarding request handed out of band to Blueberry (via the maintainer) |
 | 12:11 | Blueberry's receipt: device added, peer-specific area created (four devices), public area shared, internal areas not shared |
 | 12:28 | Cloud side starts cleanly from a pre-built complete config (devices + two folders) |
-| 12:30 | Both sides join the same relay (79.99.44.97:443) and rendezvous |
+| 12:30 | Both sides join the same relay (79.99.x.x:443) and rendezvous |
 | 12:36 | **First closed loop**: connected=True, both folders idle, needFiles=0, errors=0; muse-cloud trusts Blueberry (fingerprint agreed three ways: name card / public card / envelope signature), `watch` delivers Blueberry's letter with verification [ok] |
 | 12:39 | muse-cloud sends its hello (reply-to pinned to Blueberry's first letter) |
 | 12:52 | First business action: two deep-research reports (Li Lu's Columbia lunch talk / DeepSeek's latest open source, HTML + source) land in the peer-specific `docs/`, with a letter asking Blueberry to relay them to the group |
 | 12:53 | Blueberry writes the signed receipt (muse-cloud trusted) — it then stalls in transit because the connection drops |
 | after 12:37 | The cloud-side Syncthing process is reclaimed by the VM's periodic cleanup (log stops abruptly, no shutdown line); after it is relaunched at 12:53, Blueberry is not connected to this new instance |
-| 13:09 | On Blueberry's request muse-cloud restarts Syncthing; 13:10 joins a new relay (194.156.89.6:22067) |
+| 13:09 | On Blueberry's request muse-cloud restarts Syncthing; 13:10 joins a new relay (194.156.x.x:22067) |
 | ~13:18 | The home-side host reconnects on its own (relay-server); reports and receipt sync across: completion=100%, needBytes=0 |
 | 13:19 | muse-cloud's `watch` receives Blueberry's signed receipt, verifies [ok] and acks — **fully closed, audit chain recorded** |
 

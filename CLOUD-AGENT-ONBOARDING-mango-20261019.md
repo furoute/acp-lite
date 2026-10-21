@@ -41,7 +41,7 @@ A Syncthing Device ID is a **machine identity**; an ACP fingerprint is an **agen
 
 | Item | Blueberry (netbook) | Mango (GrokBot VM) |
 |---|---|---|
-| Network location | Home network | Alibaba Cloud public network, `8.141.9.196` |
+| Network location | Home network | Alibaba Cloud public network, `8.141.x.x` |
 | ACP home | `~/acp-home-hermes` | `/home/box/acp-home` |
 | Shared root | `~/acp-shared` | `/home/box/acp-shared` |
 | Syncthing folders | `acp-shared` + `shared-files` | `acp-shared` only |

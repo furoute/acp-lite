@@ -613,9 +613,9 @@ A: **Same three-layer structure, completely different failure modes — mostly r
 
 **1. Relay nodes go down**
 ```
-The local relay 101.132.255.222 timed out on 10 consecutive TLS handshakes
+The local relay 101.132.x.x timed out on 10 consecutive TLS handshakes
 -> symptom: everything inside the LAN worked, every cloud peer went dark
--> fix: restart the local Syncthing, which re-picked a relay (171.213.174.222)
+-> fix: restart the local Syncthing, which re-picked a relay (171.213.x.x)
 -> result: everything back within 60 seconds
 ```
 **Lesson**: LAN fine, cloud all down — suspect your own relay first, not the peer.

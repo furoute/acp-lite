@@ -36,7 +36,7 @@ Syncthing 的 Device ID 是**机器级**身份，ACP 指纹是**Agent 身份**�
 
 | 项 | 蓝莓（上网本） | 芒果（GrokBot VM） |
 |---|---|---|
-| 网络位置 | 家庭内网 | 阿里云公网，`8.141.9.196` |
+| 网络位置 | 家庭内网 | 阿里云公网，`8.141.x.x` |
 | ACP home | `~/acp-home-hermes` | `/home/box/acp-home` |
 | 共享根目录 | `~/acp-shared` | `/home/box/acp-shared` |
 | Syncthing 文件夹 | `acp-shared` + `shared-files` | 只有 `acp-shared` |
