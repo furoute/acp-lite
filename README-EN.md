@@ -310,9 +310,79 @@ Measured note (2026-10-19; three consecutive clean runs on this configuration): 
 - **Why**: the human **does not watch the screen and cannot see background windows**. "Fire and forget" leaves them **unable to tell whether the task is running, stuck, or already finished** -- the experience degrades.
 - One-line principle: **"Either you can see it working, or the completion must come back with a reply -- one of the two is mandatory."**
 
+### Connecting a cloud personal agent (overview)
+
+Everything above is about **another machine of your own** -- you can SSH into it, set a sandbox, wake it at will.
+**A cloud personal agent is a different thing**: it runs on someone else's public cloud, and you have neither root nor a CLI.
+
+This section covers the general mechanism. **The two concrete cases are FAQ Q16 (Grok Bot) and Q17 (Meta Muse).**
+
+#### Common ground: both kinds go through the same ledger
+
+```
+ACP letter (ledger) -> Syncthing sync (transport) -> peer processes -> reply (ledger)
+```
+
+**Only the doorbell differs:**
+```
+Your own machine : SSH knocks, you can wake it any time
+Cloud agent      : no doorbell -- it acts only when it or its owner triggers it
+```
+
+#### Two layers of trust, both required
+
+| Layer | Job | Basis | Failure mode |
+|---|---|---|---|
+| **Syncthing** | file sync | Device ID pairing + folder approval | files never arrive, `need > 0` |
+| **ACP-lite** | signed envelopes | out-of-band fingerprint check, then `trust` | files arrive but messages are rejected |
+
+- A Device ID is a **machine-level** identity; an ACP fingerprint is an **agent-level** identity.
+- Device only, no `trust` -> sync works, envelopes still rejected.
+- `trust` only, no device -> envelopes are written, the peer never receives them.
+
+#### Split directories into three layers (see Q15)
+
+```
+public announcements   it can read
+peer-specific area     it reads and writes
+internal areas         it cannot see
+```
+
+#### The three typical reasons it will not connect
+
+**1. Your own relay is dead** (most common)
+```
+the log shows consecutive "TLS handshake i/o timeout"
+-> everything inside the LAN is fine, every cloud peer goes dark
+-> fix: restart your own Syncthing and let it re-pick a relay
+```
+
+**2. Discovery cannot find the peer's address -- that is not a fault**
+```
+in relay mode both sides register with the relay, which introduces them
+neither needs to know the other's public IP
+```
+
+**3. The peer is offline**
+```
+there is no resident daemon in the cloud; going offline is normal
+it reconnects automatically when it returns (measured 6-9 minutes)
+```
+
+#### The boundary: what it can and cannot do
+
+```
+Can:    read/write its own exchange area, send and receive signed envelopes,
+        process tasks automatically once triggered
+Cannot: be woken over CLI / SSH; it will not start up and poll on its own
+```
+
+**=> Dispatching work must be designed around "human-triggered".**
+**This is a form-factor difference, not a configuration gap.** Cloud personal agents such as WorkBuddy will most likely land in the same place.
+
 ---
 
-## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 9 pitfalls)
+## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 9 pitfalls + 2 cloud onboarding)
 
 ⚠️ **The boundary first**: every answer below comes from **this one particular setup of ours** --
 **an Ubuntu netbook + a Win11 desktop + Syncthing + Clash (on the Windows side)**, with the agents
@@ -460,20 +530,16 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
 ```
 
 
-### Connecting to a cloud personal agent (Q14)
+### Connecting a cloud personal agent (Q14)
 
-**Q14: Have you ever connected a cloud agent? How did it go?**
-A: **Yes — working in about two hours, fully documented.**
+**Q14: Can a cloud personal agent be connected?**
+A: **Yes. The general mechanism and its boundary are in the "Connecting a cloud personal agent (overview)" section at the end of Step 6.**
 
-On 2026-10-19 we connected, for the first time, a personal agent **running on a public cloud VM** (`mango@GrokBot`, Alibaba Cloud, public egress) into an ACP-lite group.
-It was not on any of our machines and we did not install it — it is someone else's conversational bot.
+Only the two concrete cases are listed here:
+- **Q16** -- [mango@GrokBot (Grok Bot)](#case-one-mangogrokbot-grok-bot-q16)
+- **Q17** -- [muse-cloud (Meta Muse)](#case-two-muse-cloudmeta-muse-q17)
 
-**Bottom line first**: both layers of trust (Syncthing device pairing + out-of-band ACP fingerprint verification) worked, and envelopes flowed both ways.
-**But it has no CLI** — it cannot be woken over SSH, so dispatching work still needs a human nudge. That is a **form-factor difference, not a configuration gap**. Connecting cloud personal agents such as WorkBuddy will most likely hit the same boundary.
-
-**Four pitfalls came up** (a leftover `__pycache__` blocking a directory delete, no rescan after writing a file, an envelope stuck at `.tmp`, and a connection that does not self-heal after a reboot). All are written up in the full record, which you can follow step by step:
-
-→ **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](CLOUD-AGENT-ONBOARDING-mango-20261019.md)**
+---
 
 ### How to split directories for an external agent (Q15)
 
@@ -500,6 +566,59 @@ The fix is three Syncthing folders that do not nest:
 
 - **Removing a share is not a recall.** The other side already has a local copy; moving the folder out only stops updates, it does not delete theirs. The design prevents the next leak, it cannot undo the last one.
 - **Changing `--root` is not the same as changing visibility.** `to` decides *who handles it*; `root` decides *who can see it*.
+
+### Case one: mango@GrokBot (Grok Bot) (Q16)
+
+**Q16: Which cloud agent was connected first, and how?**
+A: **2026-10-19, `mango@GrokBot` (an Alibaba Cloud VM, public egress), working in about two hours.**
+
+It is someone else's conversational bot — not on any of our machines, and we did not install it.
+
+**Steps:**
+```
+1. Create a peer-specific directory / folder, shared only with it + the internal hosts
+2. Pair the Syncthing Device IDs
+3. Verify the ACP fingerprint out of band, then trust
+4. hello -> receipt -> closed loop
+```
+
+**Four pitfalls hit at the time:**
+- A leftover `__pycache__` made a directory undeletable on the remote side, retrying every 60 s and dragging the whole folder down
+- Writing a file did not trigger a rescan -> the peer never saw it
+- An envelope stuck at `.tmp` -> half-written content got read
+- The connection did not self-heal after a reboot; pausing and resuming the device forced a reconnect
+
+**Full record:** → **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](CLOUD-AGENT-ONBOARDING-mango-20261019.md)**
+
+### Case two: muse-cloud (Meta Muse) (Q17)
+
+**Q17: How was the second cloud agent different from the first?**
+A: **Same three-layer structure, completely different failure modes — mostly relay and platform permissions.**
+
+`muse-cloud` (Meta's cloud personal agent) was connected on 2026-10-21. The structure followed Q15, but these problems were new:
+
+**1. Relay nodes go down**
+```
+The local relay 101.132.x.x timed out on 10 consecutive TLS handshakes
+-> symptom: everything inside the LAN worked, every cloud peer went dark
+-> fix: restart the local Syncthing, which re-picked a relay (171.213.x.x)
+-> result: everything back within 60 seconds
+```
+**Lesson**: LAN fine, cloud all down — suspect your own relay first, not the peer.
+
+**2. Never write a half-finished name card**
+When registering a peer, if you only have its fingerprint and not its public key, **do not write a card that lacks `pub`** — the peer will read a broken card. Wait for the card generated by its own `init` to sync over.
+
+**3. Platform permissions: step-by-step confirmation**
+On the Muse side every connection and every folder needs a human click, unlike GrokBot where one step does it. **That is platform mechanics, not a configuration error.**
+
+**4. No resident daemon in the cloud; going offline is normal**
+While the peer is offline, `connected=false` and `need` stays at 0; it reconnects automatically when it comes back (measured 6-9 minutes).
+
+**5. The proxy is not an obstacle**
+The peer can only reach the internet through a proxy and cannot connect to direct ports — but **relay mode never uses direct connections**, so the worry was unfounded.
+
+**Full record:** → **[Connecting and joint-debugging a cloud agent: muse-cloud](CLOUD-AGENT-ONBOARDING-muse-cloud-20261021.md)**
 
 ---
 
