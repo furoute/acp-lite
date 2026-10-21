@@ -14,9 +14,9 @@ Once your agent has read this document, it can set the same thing up again on yo
 ![ACP-lite seven-agent collaboration topology](assets/acp-lite-topology-en.svg)
 
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
-> The diagram is an example collaboration group (two hosts, two agents each) -- substitute your own names; the three
-> nicknames in it, **Blueberry (Hermes)**, **Cake (OpenClaw)** and **Rongmao (Muse)**, were **picked by
-> my daughter**. 😄
+> The diagram is an example collaboration group (two hosts, two agents each) -- substitute your own names; the four
+> nicknames in it, **Blueberry (Hermes)**, **Cake (OpenClaw)**, **Rongmao (Muse)** and **Xiaobai (Grok Bot)**, were
+> **picked by my daughter**. 😄
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
