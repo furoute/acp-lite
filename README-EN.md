@@ -11,7 +11,7 @@ Once your agent has read this document, it can set the same thing up again on yo
 > still only read and write local files.
 > Two ordinary computers behind NAT -- no public IP, no server.
 
-![ACP-lite six-agent collaboration topology](assets/acp-lite-topology-en.svg)
+![ACP-lite seven-agent collaboration topology](assets/acp-lite-topology-en.svg)
 
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
 > The diagram is an example collaboration group (two hosts, two agents each) -- substitute your own names; the three

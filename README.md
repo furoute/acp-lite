@@ -9,7 +9,7 @@
 > 跨主机 Agent 互联的**最小实现**：一台机器一个「邮局」，Agent 仍然只读写本地文件。
 > 两台 NAT 后的普通电脑，不要公网、不要服务器。
 
-![ACP-lite 六智能体协作拓扑](assets/acp-lite-topology.svg)
+![ACP-lite 七智能体协作群拓扑](assets/acp-lite-topology.svg)
 
 > 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 图里是一个示例协作群（两台主机、每台两个 agent），换成你自己的名字即可；图中的
