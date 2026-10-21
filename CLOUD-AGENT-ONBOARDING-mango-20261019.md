@@ -48,14 +48,14 @@ A Syncthing Device ID is a **machine identity**; an ACP fingerprint is an **agen
 | CLI / SSH wake-up | Available | Not available |
 | Connection path | --- | `relay-client` (public relay) |
 
-Mango Device ID: `KLTAVRZ-WBHWHGW-P5EE57Y-JUQ3R6T-AQGS63G-K3YIJA7-VX67OPC-MW4TEQ7`  
-Blueberry Device ID: `QDLJ6NK-CXLPCYP-47IWQGH-QWG55CQ-MIHDI3E-4EMNQZY-IOFSAPX-5RLIRAQ`
+Mango Device ID: `KLTAVRZ-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX`  
+Blueberry Device ID: `QDLJ6NK-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX`
 
 | Trusted ACP identity | Short fingerprint |
 |---|---|
-| Mango (`mango`) | `eokv-a44c-5muk-pflq` |
-| Blueberry (`hermes-netbook` / `hermes`) | `we5t-qxtm-2u2s-3ann` |
-| Cake (`openclaw`) | `xv2w-f2xi-sene-ssst` |
+| Mango (`mango`) | `eokv-xxxx-xxxx-xxxx` |
+| Blueberry (`hermes-netbook` / `hermes`) | `we5t-xxxx-xxxx-xxxx` |
+| Cake (`openclaw`) | `xv2w-xxxx-xxxx-xxxx` |
 
 ### Directory isolation is the most important difference
 

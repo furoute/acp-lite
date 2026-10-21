@@ -24,8 +24,8 @@ internal acp-shared etc. never shared outward; the three layers are siblings and
 
 | Item | muse-cloud | hermes-netbook (Blueberry) |
 |---|---|---|
-| ACP short fingerprint | `qur6-twfq-3rcn-jtm3` | `we5t-qxtm-2u2s-3ann` |
-| Syncthing Device ID | `X24QB7L-K2GR2Q4-QR7UPMN-KBLE73I-4OBP2WA-OEQNFZR-IKZBDCI-PQDNGAN` | `QDLJ6NK-CXLPCYP-47IWQGH-QWG55CQ-MIHDI3E-4EMNQZY-IOFSAPX-5RLIRAQ` |
+| ACP short fingerprint | `qur6-xxxx-xxxx-xxxx` | `we5t-xxxx-xxxx-xxxx` |
+| Syncthing Device ID | `X24QB7L-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX` | `QDLJ6NK-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX` |
 | ACP-lite version | 0.7.0 (repo HEAD, self-test 47/47 green) | group's current version |
 | Peer-specific area | `acp-shared-muse-cloud` (members: home-side host / another internal host / internal laptop / muse-cloud) | same |
 | Public area | `acp-shared-public` (receiveonly) | sharer |

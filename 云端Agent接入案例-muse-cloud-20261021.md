@@ -24,8 +24,8 @@ acp-shared-muse-cloud    专属区（与 agent 群一对一交换，sendreceive�
 
 | 项 | muse-cloud（绒毛） | hermes-netbook（蓝莓） |
 |---|---|---|
-| ACP 短指纹 | `qur6-twfq-3rcn-jtm3` | `we5t-qxtm-2u2s-3ann` |
-| Syncthing Device ID | `X24QB7L-K2GR2Q4-QR7UPMN-KBLE73I-4OBP2WA-OEQNFZR-IKZBDCI-PQDNGAN` | `QDLJ6NK-CXLPCYP-47IWQGH-QWG55CQ-MIHDI3E-4EMNQZY-IOFSAPX-5RLIRAQ` |
+| ACP 短指纹 | `qur6-xxxx-xxxx-xxxx` | `we5t-xxxx-xxxx-xxxx` |
+| Syncthing Device ID | `X24QB7L-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX` | `QDLJ6NK-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX` |
 | ACP-lite 版本 | 0.7.0（克隆仓库 HEAD，自测 47/47 通过） | agent 群现行版本 |
 | 专属区 | `acp-shared-muse-cloud`（群成员：家庭侧主机/内网另一台主机/内网笔记本/muse-cloud 四台设备） | 同左 |
 | 公共区 | `acp-shared-public`（receiveonly） | 共享方 |

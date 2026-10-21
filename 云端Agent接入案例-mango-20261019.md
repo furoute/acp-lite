@@ -43,14 +43,14 @@ Syncthing 的 Device ID 是**机器级**身份，ACP 指纹是**Agent 身份**�
 | CLI / SSH 唤醒 | 有 | 没有 |
 | 连接方式 | — | relay-client（公网中继） |
 
-芒果完整 Device ID：`KLTAVRZ-WBHWHGW-P5EE57Y-JUQ3R6T-AQGS63G-K3YIJA7-VX67OPC-MW4TEQ7`  
-蓝莓完整 Device ID：`QDLJ6NK-CXLPCYP-47IWQGH-QWG55CQ-MIHDI3E-4EMNQZY-IOFSAPX-5RLIRAQ`
+芒果完整 Device ID：`KLTAVRZ-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX`  
+蓝莓完整 Device ID：`QDLJ6NK-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX-XXXXXXX`
 
 | 已信任的 ACP 身份 | 短指纹 |
 |---|---|
-| 芒果 `mango` | `eokv-a44c-5muk-pflq` |
-| 蓝莓 `hermes-netbook` / `hermes` | `we5t-qxtm-2u2s-3ann` |
-| 蛋糕 `openclaw` | `xv2w-f2xi-sene-ssst` |
+| 芒果 `mango` | `eokv-xxxx-xxxx-xxxx` |
+| 蓝莓 `hermes-netbook` / `hermes` | `we5t-xxxx-xxxx-xxxx` |
+| 蛋糕 `openclaw` | `xv2w-xxxx-xxxx-xxxx` |
 
 ### 目录隔离是最重要的差异
 
