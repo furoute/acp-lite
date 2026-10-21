@@ -190,6 +190,16 @@ rem bin.js 路径以 npm root -g 为准；Windows 默认在 %APPDATA%\npm\node_m
 node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
 
+**怎么调这个脚本：必须经 `schtasks`，不要直接后台起**
+
+```cmd
+schtasks /create /tn "ACP-Wake-DSH" /sc once /st 23:59 /f ^
+  /tr "cmd.exe /c D:\path\wake-dsh.cmd D:\path\prompt.txt danger-full-access > D:\path\out.txt 2>&1"
+schtasks /run /tn "ACP-Wake-DSH"
+```
+
+判据：**30 秒内应有回信**；若 `out.txt` 压根不存在（不是 0 字节），说明进程根本没起来（详见 Q7）。
+
 **一次唤醒 = 一次独立会话（不要复用会话）**
 
 别用 `--session-id` 去续接同一个会话。任务本身是独立的，复用会让上下文一轮轮累积：
@@ -440,8 +450,21 @@ A: **别走命令行参数**（`cmd` / PowerShell 把 UTF-8 当 GBK 读，收到
 也在**同一个 Python 进程**里读文件再调 `acp.main([...])`，别让中文经过 shell。
 
 **Q7: `schtasks` 还是 SSH 前台？**
-A: **短活用 SSH 前台，长活用计划任务**：`schtasks` 会弹控制台窗口、但**抗 SSH 断连**；SSH 前台不弹窗、
-但**随会话断开**。`start /b` 起的后台任务会被 SSH 会话回收，别用。
+A: **要「活干完了才算数」就用 `schtasks`；要「我在这儿等它答」才用 SSH 前台。**
+
+分水岭不是时长，是**你的 SSH 连接在外面**：
+
+| 场景 | 用什么 | 为什么 |
+|---|---|---|
+| **我发完就走**（发信 → 唤醒 → 回头收信） | `schtasks /create /sc once` + `/run` | 进程归任务计划程序管，SSH 断了也照跑 |
+| **我在等它当场答完**（交互式、看它边干边说） | SSH 前台 | 连接一直在，进程就活着 |
+
+**别用 `Start-Process -WindowStyle Hidden`，也别用 `start /b`** —— 它们仍在 SSH 会话里，会话一断，
+子进程被**连根拔掉**。症状极具误导性：**输出文件压根不存在**（连 0 字节的机会都没有），
+看起来就像"信发了、对方没反应"。
+
+实测（2026-10-21，Windows 11 + DSH headless）：`schtasks` 建任务 0.6 秒，回信 **17 / 28 / 50 秒**三次全成；
+同一条命令换成 `Start-Process`，280 秒零输出、文件不存在。
 
 **Q8: 环境变量怎么传给被唤醒的 CLI？**
 A: **只用单进程 `set`**：`set "DSH_PERMISSION_MODE=danger-full-access"` 紧跟着 `dsh …`（同一条 `.cmd`、

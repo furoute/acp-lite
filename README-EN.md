@@ -211,6 +211,16 @@ rem the bin.js path follows `npm root -g`; on Windows it defaults to %APPDATA%\n
 node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
 
+**How to invoke the script: always via `schtasks`, never launch it in the background**
+
+```cmd
+schtasks /create /tn "ACP-Wake-DSH" /sc once /st 23:59 /f ^
+  /tr "cmd.exe /c D:\path\wake-dsh.cmd D:\path\prompt.txt danger-full-access > D:\path\out.txt 2>&1"
+schtasks /run /tn "ACP-Wake-DSH"
+```
+
+Pass check: **a reply within 30 s**; if `out.txt` does not exist at all (not 0 bytes), the process never started (see Q7).
+
 **One wake-up = one fresh session (do not reuse a session)**
 
 Do not pass `--session-id` to continue one long conversation. Each task is independent, and reusing a session makes the context
@@ -469,9 +479,23 @@ CLI as `- < prompt.txt`; when sending Chinese mail, also read the file and call 
 process** -- never let Chinese text pass through the shell.
 
 **Q7: Should a wake-up use `schtasks` or a foreground SSH session?**
-A: **Short jobs: foreground SSH; long jobs: a scheduled task.** `schtasks` pops a console window but **survives the SSH
-disconnect**; foreground SSH pops nothing but **dies with the session**. Background jobs started with `start /b` get
-reaped by the SSH session -- don't use them.
+A: **Use `schtasks` when the work must finish after you hang up; use a foreground SSH session only when you sit there
+waiting for the answer.**
+
+The dividing line is not duration -- it is **whether your SSH connection outlives the job**:
+
+| Situation | Use | Why |
+|---|---|---|
+| **Fire and forget** (send -> wake -> come back for the reply) | `schtasks /create /sc once` + `/run` | The scheduler owns the process; it survives the SSH disconnect |
+| **Waiting for it to answer now** (interactive, watching it work) | Foreground SSH | The connection stays up, so the process stays alive |
+
+**Do not use `Start-Process -WindowStyle Hidden`, and do not use `start /b`** -- both still live inside the SSH session,
+so the moment it drops, every child process is **torn down with it**. The symptom is deeply misleading: **the output
+file does not exist at all** (it never even gets created as 0 bytes), so it looks like "the message was sent but nothing
+answered".
+
+Measured (2026-10-21, Windows 11 + DSH headless): `schtasks` created the task in 0.6 s and replies arrived in **17 / 28 /
+50 s** -- three for three. The same command under `Start-Process`: 280 s of silence, no output file.
 
 **Q8: How do I pass environment variables to the woken CLI?**
 A: **Only with a single-process `set`**: `set "DSH_PERMISSION_MODE=danger-full-access"` immediately followed by `dsh …`
