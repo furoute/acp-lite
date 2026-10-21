@@ -588,6 +588,20 @@ It is someone else's conversational bot — not on any of our machines, and we d
 - An envelope stuck at `.tmp` -> half-written content got read
 - The connection did not self-heal after a reboot; pausing and resuming the device forced a reconnect
 
+**Note: it drops the connection periodically -- that is normal**
+
+GrokBot's VM is **reclaimed / put to sleep by the platform** when idle, and the Syncthing process stops with it -> the connection drops (`connected=false`).
+**Once the VM is woken, it reconnects by itself; onboarding does not need to be redone.**
+
+```
+symptom:  connected=false, need stays at 0, the peer still has addresses in discovery
+cause:    the cloud VM was reclaimed -- not a misconfiguration, not broken sync
+fix:      wake the VM and wait for it to reconnect (within minutes)
+```
+
+**=> Collaboration design must account for this: work dispatched to a cloud agent has to be "human-triggered"; never assume it is always online.**
+**This is one of the reasons we define it as "human-triggered, automatic processing".**
+
 **Full record:** → **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](CLOUD-AGENT-ONBOARDING-mango-20261019.md)**
 
 ### Case two: muse-cloud (Meta Muse) (Q17)
