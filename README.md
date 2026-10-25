@@ -365,7 +365,7 @@ relay 模式下双方都注册到中继，由它牵线
 
 ---
 
-## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 9 条踩坑 + 2 条云端接入）
+## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 10 条踩坑 + 2 条云端接入）
 
 ⚠️ **先说边界**：下面每一条都来自**我们这一套特定环境** ——
 **Ubuntu 上网本 + Win11 台式机 + Syncthing + Clash（Windows 侧）**，agent 是 `codex-desktop` / `dsh-desktop` /
@@ -519,6 +519,25 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
   push https://x-access-token:<GH_TOKEN>@github.com/furoute/acp-lite.git main
 ```
 
+
+**Q13b: 对端 IP 每次开机都变（DHCP），脚本写死 IP 就失联，怎么办？**
+A: **按 MAC 找 IP，别按 IP 找机器。** MAC 是网卡出厂地址，不随 DHCP 变。
+
+仓库里的 `lan-find.sh` 就干这一件事：并发 ping 填满内核 ARP 表，再按 MAC 匹配 —— 一个 /24 网段 **1-5 秒**扫完。
+
+```bash
+./lan-find.sh aa:bb:cc:dd:ee:ff              # → 192.168.1.42
+./lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # 指定网段
+./lan-find.sh --list                          # 列出所有在线设备
+```
+
+**用法**：唤醒脚本里别写死 IP，先 `IP=$(./lan-find.sh <MAC>)` 再 `ssh $USER@$IP`。
+
+**为什么不用主机名**：Windows 的 NetBIOS / mDNS 在内网不一定开，跨网段更不可靠；ARP 表是内核自己维护的，最实在。
+
+**更彻底的做法**：在路由器里给这台机器做 **DHCP 保留**（MAC 绑固定 IP），一次配置永久有效。脚本是兜底，路由器绑定是根治。
+
+**平台限制**：`lan-find.sh` 读 `/proc/net/arp`，是 Linux/macOS 侧用的。Windows 侧等价命令是 `arp -a`（同样先 ping 一轮再读）。
 
 ### 接云端 Personal Agent（Q14）
 

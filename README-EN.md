@@ -394,7 +394,7 @@ Cannot: be woken over CLI / SSH; it will not start up and poll on its own
 
 ---
 
-## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 9 pitfalls + 2 cloud onboarding)
+## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 10 pitfalls + 2 cloud onboarding)
 
 ⚠️ **The boundary first**: every answer below comes from **this one particular setup of ours** --
 **an Ubuntu netbook + a Win11 desktop + Syncthing + Clash (on the Windows side)**, with the agents
@@ -555,6 +555,25 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
   push https://x-access-token:<GH_TOKEN>@github.com/furoute/acp-lite.git main
 ```
 
+
+**Q13b: The peer's IP changes on every boot (DHCP) and a hard-coded IP loses it -- what now?**
+A: **Find the IP by MAC, not the machine by IP.** A MAC address is burned into the NIC and does not move with DHCP.
+
+`lan-find.sh` in this repo does exactly that: concurrency-ping the subnet to populate the kernel ARP table, then match on MAC -- a /24 takes **1-5 seconds**.
+
+```bash
+./lan-find.sh aa:bb:cc:dd:ee:ff              # -> 192.168.1.42
+./lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # explicit subnet
+./lan-find.sh --list                          # list all online hosts
+```
+
+**How to use it**: never hard-code the IP in a wake-up script. Resolve it first -- `IP=$(./lan-find.sh <MAC>)` -- then `ssh $USER@$IP`.
+
+**Why not hostname**: Windows NetBIOS / mDNS is not guaranteed to be on, and is far less reliable across subnets. The ARP table is maintained by the kernel; it is the most down-to-earth option.
+
+**The permanent fix**: set a **DHCP reservation** on the router (bind the MAC to a fixed IP) -- configure once, works forever. The script is the fallback; the router binding is the cure.
+
+**Platform note**: `lan-find.sh` reads `/proc/net/arp`, so it runs on the Linux/macOS side. The Windows equivalent is `arp -a` (ping a round first, then read it).
 
 ### Connecting a cloud personal agent (Q14)
 
