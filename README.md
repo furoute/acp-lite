@@ -14,6 +14,7 @@
 > 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 图里是一个示例协作群（两台主机、每台两个 agent），换成你自己的名字即可；图中的
 > **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)**、**小白(Grok Bot)** 四个代号，是**我女儿起的名字**。😄
+> （小白试用期已结束，暂不可用。）
 >
 > **不混淆声明**：本项目与 Zed 的 *Agent Client Protocol*、OpenAI+Stripe 的
 > *Agentic Commerce Protocol*、IBM 已归档的 *Agent Communication Protocol*
@@ -578,8 +579,11 @@ A: **划三层，每层一个独立 folder。别让外部和内部共用一个�
 
 ### 案例一：mango@GrokBot（Grok Bot）（Q16）
 
+> **⚠️ 试用期已结束**：小白（Grok Bot）的试用已于 2026-10 结束，当前不可用。
+> 本节保留为接入方法记录，步骤与坑点仍具参考价值。
+
 **Q16: 第一个接进来的云端 agent 是哪个？怎么接的？**
-A: **2026-10-19，`mango@GrokBot`（阿里云 VM，公网出口），2 小时跑通。**
+A: **2026-10-19，`mango@GrokBot`（阿里云 VM，公网出口），2 小时跑通。**（试用期已结束，当前不可用。）
 
 它是别人家的对话式 Bot —— 不在我们任何一台机器上，也不是我们装的。
 

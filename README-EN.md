@@ -18,6 +18,7 @@ Once your agent has read this document, it can set the same thing up again on yo
 > nicknames in it -- **Lanmei** (蓝莓; roughly "Blueberry"; Hermes), **Dangao** (蛋糕; roughly "Cake"; OpenClaw),
 > **Rongmao** (绒毛; roughly "Fluff"; Muse) and **Xiaobai** (小白; roughly "Little White"; Grok Bot) -- were
 > **picked by my daughter**. 😄 Pinyin is the canonical form in English text; the glosses are only for first mention.
+> (Xiaobai's trial period has ended; currently unavailable.)
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
@@ -614,8 +615,12 @@ The fix is three Syncthing folders that do not nest:
 
 ### Case one: mango@GrokBot (Grok Bot) (Q16)
 
+> **Warning: trial period ended.** Xiaobai (Grok Bot)'s trial ended in October 2026
+> and it is no longer available. This section is kept as a record of the onboarding
+> method; the steps and pitfalls remain useful.
+
 **Q16: Which cloud agent was connected first, and how?**
-A: **2026-10-19, `mango@GrokBot` (an Alibaba Cloud VM, public egress), working in about two hours.**
+A: **2026-10-19, `mango@GrokBot` (an Alibaba Cloud VM, public egress), working in about two hours.** (Trial period ended; currently unavailable.)
 
 It is someone else's conversational bot — not on any of our machines, and we did not install it.
 
