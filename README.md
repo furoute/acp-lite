@@ -116,7 +116,7 @@ python acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
 - 开机自启：Windows 任务计划程序（登录触发）；Linux `systemd --user`（或 `crontab @reboot`）；macOS `launchd`。
 - 写消息文件 / Syncthing 同步 / `watch` 收信落盘 **都不耗 token**（`watch` 进程**零网络连接**，源码里没有任何 HTTP 客户端）；**唯一耗点是"自动叫模型处理"，而本程序不提供这个动作**。
 
-另外两条要知道的：**`watch` 会写 `<home>/state/seen.json`**（记"见过哪些消息"，**7 天后过期**）—— 判重就靠它，**删掉 `state/` 会让旧信重新投一遍**；
+另外两条要知道的：**`watch` 会写 `<home>/state/seen.json`**（记"见过哪些消息"，**7 天后过期**）—— **0.7.1 起它只是性能缓存**：持久去重事实来自 `audit.jsonl` 里的 `deliver` / `ack` 事件，删掉 `state/` 或 inbox **不会**让旧信重投（删审计链才会）；
 Linux 想开机自启又没有现成文件，可照下面这份 `systemd --user` 模板（**本仓库不提供现成 unit，请自己落到 `~/.config/systemd/user/acp-watch.service` 并按你的路径改**）：
 
 ```ini
@@ -325,12 +325,13 @@ ACP 写信（账本） → Syncthing 同步（传输） → 对方处理 → 回
 - 只加设备不 trust → 同步通了，信封仍被拒。
 - 只 trust 不加设备 → 信写得出去，对端收不到。
 
-#### 目录照三层分（见 Q15）
+#### 目录照三区分（见 Q15）
 
 ```
-公共公告区    它能读
-对端专属区    它读写
-内部区        它看不到
+TRUST      内部区        它看不到（acp-shared / shared-files / acp-shared-public）
+DMZ        协作区        它读写自己的 folder（acp-shared-dmz-<队友>）
+UNTRUST    只读区        它能读不能写（acp-shared-<对端>，内部 sendonly）
+acp-mail-<对端>  收信口    它能写（只放信封 JSON）—— 它投稿就写这里
 ```
 
 #### 它会连不上的三种典型原因
