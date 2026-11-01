@@ -251,7 +251,7 @@ msg_id   : hermes-<host>-<date>-<time>-<hash>
 | 3 | prompt.txt 明明在，却报找不到文件 | 脚本先 `cd` 再 `< prompt.txt`，相对路径已失效 | `cd` 之前用 `%~dp0` 把提示词解析成绝对路径 | `if not exist "%PROMPT_FILE%" exit /b 2` 没触发 |
 | 4 | 变量设了，dsh 里却读不到（静默不干活） | 变量没和 dsh 同进程：`cmd /c "set X=Y && dsh"` 链式，或经 `dsh.cmd` 包装层转手 | 同一条 `.cmd` 里 `set` 完直接调 `node ...\bin.js`，绕过 `dsh.cmd` | 让 prompt 输出 `$env:DSH_PERMISSION_MODE`，回显 `danger-full-access` |
 | 5 | 同一个 `dsh`，行为 / 配置却对不上 | PATH 里有两个 `dsh.cmd`：桌面版自带（转 `.exe`）与 npm 全局（转 `bin.js`），配置目录各自独立 | `where dsh` 看第一条；要确定性就在模板里写死 `node ...\bin.js` | 启动横幅里的配置目录 / 版本与预期一致；两者可共存、不冲突，只有 `resume` 抢写权会失败 |
-| 6 | 唤醒后**石沉大海**：等几分钟毫无动静，连输出文件都不存在 | 用 `Start-Process -WindowStyle Hidden`（或 `cmd /c` 后台）起进程 —— SSH 一断，整个会话的子进程被连根拔掉 | 改用 `schtasks /create /sc once` + `/run`，进程由任务计划程序托管，与 SSH 会话解耦 | 建任务后 30 秒内应看到回信；若输出文件**压根不存在**（不是 0 字节），就是这个坑 |
+| 6 | 唤醒后**石沉大海**：等几分钟毫无动静，连输出文件都不存在 | 用 `Start-Process -WindowStyle Hidden`（或 `cmd /c` 后台）起进程 —— SSH 一断，整个会话的子进程被连根拔掉 | 改用 `schtasks /create /sc once` + `/run`，进程由任务计划程序托管，与 SSH 会话解耦 | 建任务后 30 秒内通常能看到回信（慢机器 50 秒内也算正常）；若输出文件**压根不存在**（不是 0 字节），就是这个坑 |
 
 ```bash
 # 同机两个 agent 也能双向 CLI 互调（换成你自己的 CLI 同理）
@@ -367,7 +367,7 @@ relay 模式下双方都注册到中继，由它牵线
 
 ---
 
-## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 11 条踩坑 + 4 条接入方案，共 20 问）
+## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 10 条踩坑 + 4 条接入方案，共 20 问）
 
 ⚠️ **先说边界**：下面每一条都来自**我们这一套特定环境** ——
 **Ubuntu 上网本 + Win11 台式机 + Syncthing + Clash（Windows 侧）**，agent 是 `codex-desktop` / `dsh-desktop` /
@@ -555,7 +555,7 @@ A: **能接。通用机制和边界见第六步末尾的「云端 Personal Agent
 ### 和外部 agent 怎么分目录（Q15）
 
 **Q15: 接了外部 agent 之后，共享目录该怎么划？**
-A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内按用途拆 folder。别让外部和内部的「文件区」共用目录** —— 唯一的例外是对外收信口 `acp-mail-<对端>`，它必须双方共享（否则对端发不出信），但里面只放信封 JSON，不放任何内部文件。
+A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内按用途拆 folder。别让外部和内部的「文件区」共用目录** —— 唯一的例外是对外收信口 `acp-mail-<对端>`：它必须双方共享（否则对端发不出信），但里面只有 `outbox/`、`peers/`、`state/`、`.stignore` 这些运行设施，不放任何内部文件。
 
 2026-10-20 实测：外部 agent 曾能读到内部的全部文件（含个人简历），因为共用了 `shared-files`。
 2026-11-01 定为三区模型：**信任区随便写、DMZ 缓冲区对外协作、不信任区只给看。**
@@ -569,7 +569,7 @@ A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内
 | | `acp-shared-public` | 内部公告、协议说明、模板 | 内部各机 | `sendreceive` |
 | **DMZ**（中间缓冲区，多人协作） | `acp-shared-dmz-<队友>` | 与该队友协作的项目文件 | 内部 + **该队友**（一人一个 folder） | 双方 `sendreceive` |
 | **UNTRUST**（不信任区，只发不收） | `acp-shared-<对端>` | 只给对端看的材料 | 内部 + 该对端 | 内部 `sendonly`，对端 `receiveonly` |
-| **对外收信口** | `acp-mail-<对端>` | **只放** `outbox/<对端>/*.json` 与 `peers/` | 内部 + 该对端 | 双方 `sendreceive` |
+| **对外收信口** | `acp-mail-<对端>` | **只放** `outbox/<对端>/*.json`、`peers/`、`state/`、`.stignore`（不放任何内部文件） | 内部 + 该对端 | 双方 `sendreceive` |
 
 **为什么单独要一个 `acp-mail-<对端>`：** `acp.py send` 要求发送方能往共享 `outbox` 写文件。
 外部若只能读（`receiveonly`），它就**发不出信**——「外部投稿走 ACP」根本落不了地。
@@ -673,7 +673,7 @@ Muse 那边每个连接、每个 folder 都要人工点确认，不像 GrokBot �
 1. **同机不变**——原文件通道照旧；本程序不读不写 `mailbox/`。
 2. **跨机只共享目录，不共享整台机器**——Syncthing / Tailscale / 网盘 / U 盘都能当传输层。
    只有一个网内对端时，一个目录就够了；一旦接入外部 agent，就按 **Q15 的三区**分（TRUST / DMZ / UNTRUST），各自独立 folder。
-3. **私钥不进共享目录**——`--home` 是本机私有；共享目录里只有名片和发件箱。
+3. **私钥不进共享目录**——`--home` 是本机私有；共享目录里只有名片（`peers/`）、发件箱（`outbox/`）和投递缓存（`state/`），没有私钥。
 4. **收信不调模型**——`watch` 只落盘 + 记审计，挂机不烧 token。
 5. **缺依赖就拒收（fail-closed）**——本机没有 `cryptography` 时跨机消息**默认一律拒收**；
    自测要收只能显式加 `--allow-unsigned`，此时消息标记 `unverified` 且**永不进入 `ready`**。
