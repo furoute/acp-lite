@@ -9,11 +9,12 @@
 > 跨主机 Agent 互联的**最小实现**：一台机器一个「邮局」，Agent 仍然只读写本地文件。
 > 两台 NAT 后的普通电脑，不要公网、不要服务器。
 
-![ACP-lite 六智能体协作拓扑](assets/acp-lite-topology.svg)
+![ACP-lite 七智能体协作群拓扑](assets/acp-lite-topology.svg)
 
 > 命名：**ACP-lite = Agent Connect Personal**。最后一个 P，**最终希望能写成 Peace**。
 > 图里是一个示例协作群（两台主机、每台两个 agent），换成你自己的名字即可；图中的
-> **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)** 三个代号，是**我女儿起的名字**。😄
+> **蓝莓(Hermes)**、**蛋糕(OpenClaw)**、**绒毛(Muse)**、**小白(Grok Bot)** 四个代号，是**我女儿起的名字**。😄
+> （小白试用期已结束，暂不可用。）
 >
 > **不混淆声明**：本项目与 Zed 的 *Agent Client Protocol*、OpenAI+Stripe 的
 > *Agentic Commerce Protocol*、IBM 已归档的 *Agent Communication Protocol*
@@ -190,6 +191,16 @@ rem bin.js 路径以 npm root -g 为准；Windows 默认在 %APPDATA%\npm\node_m
 node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
 
+**怎么调这个脚本：必须经 `schtasks`，不要直接后台起**
+
+```cmd
+schtasks /create /tn "ACP-Wake-DSH" /sc once /st 23:59 /f ^
+  /tr "cmd.exe /c D:\path\wake-dsh.cmd D:\path\prompt.txt danger-full-access > D:\path\out.txt 2>&1"
+schtasks /run /tn "ACP-Wake-DSH"
+```
+
+判据：**30 秒内应有回信**；若 `out.txt` 压根不存在（不是 0 字节），说明进程根本没起来（详见 Q7）。
+
 **一次唤醒 = 一次独立会话（不要复用会话）**
 
 别用 `--session-id` 去续接同一个会话。任务本身是独立的，复用会让上下文一轮轮累积：
@@ -231,7 +242,7 @@ msg_id   : hermes-<host>-<date>-<time>-<hash>
 后果（实测症状）：dsh 按字面校验档位 → 模块不激活 → `pwsh` 工具 pending → 启动报 `0xC0000142`。
 判据：`echo [%DSH_PERMISSION_MODE%]` 必须回显 `[danger-full-access]` —— `]` 前多一个空格就是错的。
 
-**5 个坑：症状 → 真因 → 指令 → 判据**
+**6 个坑：症状 → 真因 → 指令 → 判据**
 
 | # | 你会看到 | 真因 | 指令（照做） | 判据 |
 |---|---|---|---|---|
@@ -240,6 +251,7 @@ msg_id   : hermes-<host>-<date>-<time>-<hash>
 | 3 | prompt.txt 明明在，却报找不到文件 | 脚本先 `cd` 再 `< prompt.txt`，相对路径已失效 | `cd` 之前用 `%~dp0` 把提示词解析成绝对路径 | `if not exist "%PROMPT_FILE%" exit /b 2` 没触发 |
 | 4 | 变量设了，dsh 里却读不到（静默不干活） | 变量没和 dsh 同进程：`cmd /c "set X=Y && dsh"` 链式，或经 `dsh.cmd` 包装层转手 | 同一条 `.cmd` 里 `set` 完直接调 `node ...\bin.js`，绕过 `dsh.cmd` | 让 prompt 输出 `$env:DSH_PERMISSION_MODE`，回显 `danger-full-access` |
 | 5 | 同一个 `dsh`，行为 / 配置却对不上 | PATH 里有两个 `dsh.cmd`：桌面版自带（转 `.exe`）与 npm 全局（转 `bin.js`），配置目录各自独立 | `where dsh` 看第一条；要确定性就在模板里写死 `node ...\bin.js` | 启动横幅里的配置目录 / 版本与预期一致；两者可共存、不冲突，只有 `resume` 抢写权会失败 |
+| 6 | 唤醒后**石沉大海**：等几分钟毫无动静，连输出文件都不存在 | 用 `Start-Process -WindowStyle Hidden`（或 `cmd /c` 后台）起进程 —— SSH 一断，整个会话的子进程被连根拔掉 | 改用 `schtasks /create /sc once` + `/run`，进程由任务计划程序托管，与 SSH 会话解耦 | 建任务后 30 秒内应看到回信；若输出文件**压根不存在**（不是 0 字节），就是这个坑 |
 
 ```bash
 # 同机两个 agent 也能双向 CLI 互调（换成你自己的 CLI 同理）
@@ -354,7 +366,7 @@ relay 模式下双方都注册到中继，由它牵线
 
 ---
 
-## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 9 条踩坑 + 2 条云端接入）
+## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 10 条踩坑 + 2 条云端接入）
 
 ⚠️ **先说边界**：下面每一条都来自**我们这一套特定环境** ——
 **Ubuntu 上网本 + Win11 台式机 + Syncthing + Clash（Windows 侧）**，agent 是 `codex-desktop` / `dsh-desktop` /
@@ -439,8 +451,21 @@ A: **别走命令行参数**（`cmd` / PowerShell 把 UTF-8 当 GBK 读，收到
 也在**同一个 Python 进程**里读文件再调 `acp.main([...])`，别让中文经过 shell。
 
 **Q7: `schtasks` 还是 SSH 前台？**
-A: **短活用 SSH 前台，长活用计划任务**：`schtasks` 会弹控制台窗口、但**抗 SSH 断连**；SSH 前台不弹窗、
-但**随会话断开**。`start /b` 起的后台任务会被 SSH 会话回收，别用。
+A: **要「活干完了才算数」就用 `schtasks`；要「我在这儿等它答」才用 SSH 前台。**
+
+分水岭不是时长，是**你的 SSH 连接在外面**：
+
+| 场景 | 用什么 | 为什么 |
+|---|---|---|
+| **我发完就走**（发信 → 唤醒 → 回头收信） | `schtasks /create /sc once` + `/run` | 进程归任务计划程序管，SSH 断了也照跑 |
+| **我在等它当场答完**（交互式、看它边干边说） | SSH 前台 | 连接一直在，进程就活着 |
+
+**别用 `Start-Process -WindowStyle Hidden`，也别用 `start /b`** —— 它们仍在 SSH 会话里，会话一断，
+子进程被**连根拔掉**。症状极具误导性：**输出文件压根不存在**（连 0 字节的机会都没有），
+看起来就像"信发了、对方没反应"。
+
+实测（2026-10-21，Windows 11 + DSH headless）：`schtasks` 建任务 0.6 秒，回信 **17 / 28 / 50 秒**三次全成；
+同一条命令换成 `Start-Process`，280 秒零输出、文件不存在。
 
 **Q8: 环境变量怎么传给被唤醒的 CLI？**
 A: **只用单进程 `set`**：`set "DSH_PERMISSION_MODE=danger-full-access"` 紧跟着 `dsh …`（同一条 `.cmd`、
@@ -496,6 +521,25 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
 ```
 
 
+**Q13b: 对端 IP 每次开机都变（DHCP），脚本写死 IP 就失联，怎么办？**
+A: **按 MAC 找 IP，别按 IP 找机器。** MAC 是网卡出厂地址，不随 DHCP 变。
+
+仓库里的 `lan-find.sh` 就干这一件事：并发 ping 填满内核 ARP 表，再按 MAC 匹配 —— 一个 /24 网段 **1-5 秒**扫完。
+
+```bash
+./lan-find.sh aa:bb:cc:dd:ee:ff              # → 192.168.1.42
+./lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # 指定网段
+./lan-find.sh --list                          # 列出所有在线设备
+```
+
+**用法**：唤醒脚本里别写死 IP，先 `IP=$(./lan-find.sh <MAC>)` 再 `ssh $USER@$IP`。
+
+**为什么不用主机名**：Windows 的 NetBIOS / mDNS 在内网不一定开，跨网段更不可靠；ARP 表是内核自己维护的，最实在。
+
+**更彻底的做法**：在路由器里给这台机器做 **DHCP 保留**（MAC 绑固定 IP），一次配置永久有效。脚本是兜底，路由器绑定是根治。
+
+**平台限制**：`lan-find.sh` 读 `/proc/net/arp`，是 Linux/macOS 侧用的。Windows 侧等价命令是 `arp -a`（同样先 ping 一轮再读）。
+
 ### 接云端 Personal Agent（Q14）
 
 **Q14: 云端 personal agent 能接吗？**
@@ -535,8 +579,11 @@ A: **划三层，每层一个独立 folder。别让外部和内部共用一个�
 
 ### 案例一：mango@GrokBot（Grok Bot）（Q16）
 
+> **⚠️ 试用期已结束**：小白（Grok Bot）的试用已于 2026-10 结束，当前不可用。
+> 本节保留为接入方法记录，步骤与坑点仍具参考价值。
+
 **Q16: 第一个接进来的云端 agent 是哪个？怎么接的？**
-A: **2026-10-19，`mango@GrokBot`（阿里云 VM，公网出口），2 小时跑通。**
+A: **2026-10-19，`mango@GrokBot`（阿里云 VM，公网出口），2 小时跑通。**（试用期已结束，当前不可用。）
 
 它是别人家的对话式 Bot —— 不在我们任何一台机器上，也不是我们装的。
 

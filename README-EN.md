@@ -11,12 +11,14 @@ Once your agent has read this document, it can set the same thing up again on yo
 > still only read and write local files.
 > Two ordinary computers behind NAT -- no public IP, no server.
 
-![ACP-lite six-agent collaboration topology](assets/acp-lite-topology-en.svg)
+![ACP-lite seven-agent collaboration topology](assets/acp-lite-topology-en.svg)
 
 > Naming: **ACP-lite = Agent Connect Personal**. The final P is, **we hope, eventually read as Peace**.
-> The diagram is an example collaboration group (two hosts, two agents each) -- substitute your own names; the three
-> nicknames in it, **Blueberry (Hermes)**, **Cake (OpenClaw)** and **Rongmao (Muse)**, were **picked by
-> my daughter**. 😄
+> The diagram is an example collaboration group (two hosts, two agents each) -- substitute your own names; the four
+> nicknames in it -- **Lanmei** (蓝莓; roughly "Blueberry"; Hermes), **Dangao** (蛋糕; roughly "Cake"; OpenClaw),
+> **Rongmao** (绒毛; roughly "Fluff"; Muse) and **Xiaobai** (小白; roughly "Little White"; Grok Bot) -- were
+> **picked by my daughter**. 😄 Pinyin is the canonical form in English text; the glosses are only for first mention.
+> (Xiaobai's trial period has ended; currently unavailable.)
 >
 > **Non-affiliation notice**: this project has **no relationship whatsoever** with Zed's *Agent Client Protocol*,
 > OpenAI+Stripe's *Agentic Commerce Protocol*, or IBM's archived *Agent Communication Protocol*.
@@ -210,6 +212,16 @@ rem the bin.js path follows `npm root -g`; on Windows it defaults to %APPDATA%\n
 node "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\lib\bin.js" --profile headless - < "%PROMPT_FILE%"
 ```
 
+**How to invoke the script: always via `schtasks`, never launch it in the background**
+
+```cmd
+schtasks /create /tn "ACP-Wake-DSH" /sc once /st 23:59 /f ^
+  /tr "cmd.exe /c D:\path\wake-dsh.cmd D:\path\prompt.txt danger-full-access > D:\path\out.txt 2>&1"
+schtasks /run /tn "ACP-Wake-DSH"
+```
+
+Pass check: **a reply within 30 s**; if `out.txt` does not exist at all (not 0 bytes), the process never started (see Q7).
+
 **One wake-up = one fresh session (do not reuse a session)**
 
 Do not pass `--session-id` to continue one long conversation. Each task is independent, and reusing a session makes the context
@@ -253,7 +265,7 @@ RIGHT: set "DSH_PERMISSION_MODE=danger-full-access"      <- exact value
 What happens (measured symptom): `dsh` validates the level literally -> modules do not activate -> the `pwsh` tool stays pending -> startup fails with `0xC0000142`.
 Pass check: `echo [%DSH_PERMISSION_MODE%]` must print `[danger-full-access]` -- a space before `]` means it is wrong.
 
-**Five pitfalls: symptom -> root cause -> do this -> pass check**
+**Six pitfalls: symptom -> root cause -> do this -> pass check**
 
 | # | What you see | Root cause | Do this | Pass check |
 |---|---|---|---|---|
@@ -262,12 +274,13 @@ Pass check: `echo [%DSH_PERMISSION_MODE%]` must print `[danger-full-access]` -- 
 | 3 | prompt.txt exists, yet "file not found" | The script `cd`s first, then `< prompt.txt` is a stale relative path | Resolve the prompt to an absolute path with `%~dp0` **before** `cd` | `if not exist "%PROMPT_FILE%" exit /b 2` never fires |
 | 4 | The variable is set but dsh cannot see it (silent no-op) | The variable is not in the same process as dsh: `cmd /c "set X=Y && dsh"` chaining, or a `dsh.cmd` wrapper in between | In one `.cmd`, `set` then call `node ...\bin.js` directly, bypassing `dsh.cmd` | Have the prompt print `$env:DSH_PERMISSION_MODE`; it must echo `danger-full-access` |
 | 5 | The same `dsh` behaves / configures differently than expected | PATH holds two `dsh.cmd` files -- the desktop build (runs `.exe`) and the npm global one (runs `bin.js`) -- each with its own config dir | `where dsh` and read the first hit; for determinism hard-code `node ...\bin.js` in the template | The config dir / version in the startup banner matches what you expect; the two coexist without conflict, and only `resume` can lose the write race |
+| 6 | The wake **goes nowhere**: minutes pass with no activity, and not even an output file exists | The process was started with `Start-Process -WindowStyle Hidden` (or `cmd /c` in the background) -- when SSH disconnects, every child of that session is torn down with it | Use `schtasks /create /sc once` + `/run`; the scheduler owns the process, decoupled from the SSH session | Expect a reply within 30 s; if the output file **does not exist at all** (not 0 bytes), this is the trap |
 
 ```bash
 # Two agents on the same host can also call each other over CLI, in both directions
 # (substitute your own CLIs -- the same holds)
-openclaw agent --message "reply with just one word: received"   # Blueberry (Hermes) → Cake (OpenClaw)
-hermes -z "reply with just one word: received"                  # Cake → Blueberry (the reverse holds too)
+openclaw agent --message "reply with just one word: received"   # Lanmei (Hermes) -> Dangao (OpenClaw)
+hermes -z "reply with just one word: received"                  # Dangao -> Lanmei (the reverse holds too)
 ```
 
 A wake-up carries only a "**pointer**" (the absolute path of the received letter, which is where `msg_id` lives); the body is still read by the other side from its own mailbox --
@@ -306,7 +319,7 @@ Measured note (2026-10-19; three consecutive clean runs on this configuration): 
 **A wake-up must be followed by a report (a collaboration discipline, not an implementation detail of one machine)**
 
 - **The woken side** (Codex / DSH): stay visibly "processing" while working (do not exit the session early); when done you **must send a signed ACP reply + a broadcast** -- going quiet leaves the waker unable to tell whether you never got it, are still working, or already finished.
-- **The waker** (Blueberry and friends): **watch until the receipt arrives**; report completion -- or timeout -- to the human **proactively**, and never make them ask.
+- **The waker** (Lanmei and friends): **watch until the receipt arrives**; report completion -- or timeout -- to the human **proactively**, and never make them ask.
 - **Why**: the human **does not watch the screen and cannot see background windows**. "Fire and forget" leaves them **unable to tell whether the task is running, stuck, or already finished** -- the experience degrades.
 - One-line principle: **"Either you can see it working, or the completion must come back with a reply -- one of the two is mandatory."**
 
@@ -382,7 +395,7 @@ Cannot: be woken over CLI / SSH; it will not start up and poll on its own
 
 ---
 
-## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 9 pitfalls + 2 cloud onboarding)
+## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 10 pitfalls + 2 cloud onboarding)
 
 ⚠️ **The boundary first**: every answer below comes from **this one particular setup of ours** --
 **an Ubuntu netbook + a Win11 desktop + Syncthing + Clash (on the Windows side)**, with the agents
@@ -467,9 +480,23 @@ CLI as `- < prompt.txt`; when sending Chinese mail, also read the file and call 
 process** -- never let Chinese text pass through the shell.
 
 **Q7: Should a wake-up use `schtasks` or a foreground SSH session?**
-A: **Short jobs: foreground SSH; long jobs: a scheduled task.** `schtasks` pops a console window but **survives the SSH
-disconnect**; foreground SSH pops nothing but **dies with the session**. Background jobs started with `start /b` get
-reaped by the SSH session -- don't use them.
+A: **Use `schtasks` when the work must finish after you hang up; use a foreground SSH session only when you sit there
+waiting for the answer.**
+
+The dividing line is not duration -- it is **whether your SSH connection outlives the job**:
+
+| Situation | Use | Why |
+|---|---|---|
+| **Fire and forget** (send -> wake -> come back for the reply) | `schtasks /create /sc once` + `/run` | The scheduler owns the process; it survives the SSH disconnect |
+| **Waiting for it to answer now** (interactive, watching it work) | Foreground SSH | The connection stays up, so the process stays alive |
+
+**Do not use `Start-Process -WindowStyle Hidden`, and do not use `start /b`** -- both still live inside the SSH session,
+so the moment it drops, every child process is **torn down with it**. The symptom is deeply misleading: **the output
+file does not exist at all** (it never even gets created as 0 bytes), so it looks like "the message was sent but nothing
+answered".
+
+Measured (2026-10-21, Windows 11 + DSH headless): `schtasks` created the task in 0.6 s and replies arrived in **17 / 28 /
+50 s** -- three for three. The same command under `Start-Process`: 280 s of silence, no output file.
 
 **Q8: How do I pass environment variables to the woken CLI?**
 A: **Only with a single-process `set`**: `set "DSH_PERMISSION_MODE=danger-full-access"` immediately followed by `dsh …`
@@ -530,6 +557,25 @@ git -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 -c credential
 ```
 
 
+**Q13b: The peer's IP changes on every boot (DHCP) and a hard-coded IP loses it -- what now?**
+A: **Find the IP by MAC, not the machine by IP.** A MAC address is burned into the NIC and does not move with DHCP.
+
+`lan-find.sh` in this repo does exactly that: concurrency-ping the subnet to populate the kernel ARP table, then match on MAC -- a /24 takes **1-5 seconds**.
+
+```bash
+./lan-find.sh aa:bb:cc:dd:ee:ff              # -> 192.168.1.42
+./lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # explicit subnet
+./lan-find.sh --list                          # list all online hosts
+```
+
+**How to use it**: never hard-code the IP in a wake-up script. Resolve it first -- `IP=$(./lan-find.sh <MAC>)` -- then `ssh $USER@$IP`.
+
+**Why not hostname**: Windows NetBIOS / mDNS is not guaranteed to be on, and is far less reliable across subnets. The ARP table is maintained by the kernel; it is the most down-to-earth option.
+
+**The permanent fix**: set a **DHCP reservation** on the router (bind the MAC to a fixed IP) -- configure once, works forever. The script is the fallback; the router binding is the cure.
+
+**Platform note**: `lan-find.sh` reads `/proc/net/arp`, so it runs on the Linux/macOS side. The Windows equivalent is `arp -a` (ping a round first, then read it).
+
 ### Connecting a cloud personal agent (Q14)
 
 **Q14: Can a cloud personal agent be connected?**
@@ -569,8 +615,12 @@ The fix is three Syncthing folders that do not nest:
 
 ### Case one: mango@GrokBot (Grok Bot) (Q16)
 
+> **Warning: trial period ended.** Xiaobai (Grok Bot)'s trial ended in October 2026
+> and it is no longer available. This section is kept as a record of the onboarding
+> method; the steps and pitfalls remain useful.
+
 **Q16: Which cloud agent was connected first, and how?**
-A: **2026-10-19, `mango@GrokBot` (an Alibaba Cloud VM, public egress), working in about two hours.**
+A: **2026-10-19, `mango@GrokBot` (an Alibaba Cloud VM, public egress), working in about two hours.** (Trial period ended; currently unavailable.)
 
 It is someone else's conversational bot — not on any of our machines, and we did not install it.
 
