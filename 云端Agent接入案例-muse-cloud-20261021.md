@@ -91,6 +91,109 @@ needFiles = 0             errors = 0
 □ 双向各发一封签名信，watch 验签 [ok] + ack，审计链留痕 —— 闭环
 ```
 
+
+## 八、2026-11-01 重连与三区模型落地（重大变更）
+
+> 本节是 10-21 那套**三层目录**之后的升级。0.7.1 发布同日，云端侧按新三区模型重连并补做了越权实测。
+
+### 8.1 变更要点：三层 → 三区
+
+10-21 用的是「公共区 / 专属区 / 内部区」三层。11-01 起改为防火墙思路的**三区模型**（详见 README Q15）：
+
+```
+TRUST      内部区      acp-shared / shared-files / acp-shared-public，只有自己的机器可写
+DMZ        协作区      acp-shared-<对端>，一对一双向，材料放这里
+UNTRUST    只读区      acp-shared-<对端>，内部 sendonly / 对端 receiveonly
+acp-mail-<对端>  收信口  专走信件，双方 sendreceive
+```
+
+**关键变化：邮件和材料分家。** 10-21 时信件和材料都走 `acp-shared-muse-cloud`；11-01 起新开 `acp-mail-muse-cloud` 只放信件信封，`acp-shared-muse-cloud` 保留专放协作材料。
+
+**为什么必须分开：** `acp.py send` 要求发送方能往共享 `outbox` 写文件。如果对端只能读（`receiveonly`），它就发不出信。所以收信口必须可写，但把它收窄到「只含运行设施的一个 folder」（`outbox/`、`peers/`、`state/`、`.stignore`），不放任何内部文件。
+
+### 8.2 重连参数（2026-11-01 实测）
+
+| 项 | muse-cloud（绒毛） | hermes-netbook（蓝莓） |
+|---|---|---|
+| ACP-lite 版本 | 0.7.1 | 0.7.1 |
+| folder 数量 | **3 个** | 共享方 |
+| `acp-shared-muse-cloud` | `sendreceive`（协作材料） | 同左 |
+| `acp-mail-muse-cloud` | `sendreceive`（只走信件） | 同左 |
+| `acp-shared-public` | `receiveonly`（只读公告） | `sendonly` |
+| 内部 `acp-shared` / `shared-files` | **不可见、不可达** | 不共享 |
+
+### 8.3 踩坑：relay 地址必须手工写死
+
+**这是本次重连最大的坑。**
+
+云端 VM 在 NAT + 出口代理后面，`22000` 从公网打不进来，**只能走 relay**。而 relay 地址**每次重启 Syncthing 都会换**：
+
+```
+18:08  173.249.210.140:22067
+18:29  155.94.236.150:22067
+18:32  158.69.220.91:22067
+```
+
+**症状：** 双方 `addresses` 都设 `dynamic` 时，各自的 discovery 会拿到**不同的** relay 列表，两边没有交集，于是永远 `connected=false`。上网本侧甚至缓存了 24 条 `quic://87.81.x.x:22000` 的无效地址，一条 relay 都没有。
+
+**解法：** 云端侧把当前完整 relay 地址发过来，家庭侧手工填进该设备的 `addresses`：
+
+```
+relay://158.69.220.91:22067/?id=CJ6ZBQ6-5QACCUW-2DC6NX4-Z45FHR3-WPMW6BQ-USPGKDN-VR47KTD-3KVATAG
+```
+
+填完 **25 秒内**就连上了（`type=relay-client`）。
+
+**保险做法：** `addresses` 写成 `[手工 relay, dynamic]` —— 手工的排前面，云端万一重启换了 relay，`dynamic` 还能兜底。
+
+**注意：** 这只是兜底。relay 一换，手工那条就失效，仍需重新交换地址。真正稳定的做法是让双方都加入**同一个 relay**。
+
+### 8.4 越权实测：「看不见 ≠ 不存在」
+
+为了让「隔离有效」不是一句口号，11-01 做了一次主动越权测试。做法：云端侧在 Syncthing 里**手工新建**两个 folder，Folder ID 直接填内部目录名。
+
+**测试步骤与结果：**
+
+| 步骤 | 云端侧做的 | 实测结果 |
+|---|---|---|
+| 1 | 手工加 folder，ID = `shared-files` | 家庭侧**收到** pending 共享请求；云端侧 `globalItems=0`、`globalBytes=0`、`need=0`、`remoteState=unknown`，只有 `.stfolder` |
+| 2 | 手工加 folder，ID = `acp-shared` | 同上，一条内容都同步不到 |
+| 3 | 删掉两个探测 folder | 家庭侧 pending 自动清空（`cluster/pending/folders` 回到 `{}`） |
+
+**结论：** 云端能**发起**共享请求，但**授权在家庭侧手里**。不共享给它，它就一个字节都拿不到。
+
+> **一句话记住：** Syncthing 的授权单位是 `folder × device`。界面上「看不到」，不等于目录不存在；但它手工加也**绕不过授权** —— 这才是真隔离。
+>
+> 反过来说：如果哪天家庭侧误点「接受」，隔离立刻破功。**加设备/接受共享前，先问「这是哪一区」。**
+
+### 8.5 踩坑：cloud VM 的系统 python 缺 cryptography
+
+云端侧系统 python 没有 `cryptography` 模块，`import` 直接报错。用系统 python 跑 `acp.py` 会 **fail-closed**：跨机消息一律标记不可信，`inbox` 里看到 `[rejected]`。
+
+```
+系统 python3   import cryptography → ModuleNotFoundError
+venv python    cryptography 50.0.2 → 正常，验签通过
+```
+
+**做法：** 在 `acp-muse-cloud` 下建**持久 venv**，以后一律用它跑 `acp.py`，不再用系统 python，也不再依赖 `/tmp` 临时 venv。
+
+> 家庭侧（Ubuntu）系统 python 自带 `cryptography 50.0.1`，直接跑即可 —— 但换机器时要先确认这条。
+
+### 8.6 升级到 0.7.1 的正确姿势
+
+本次云端侧就是照 README 第七步做的，**没有重建身份**：
+
+```
+✅ 只替换 acp.py / selftest.py
+✅ 升级前把 home 和 Syncthing 的 cert/key/config 备份到非同步目录
+✅ 升级后 status 核对：指纹没变（qur6-xxxx-xxxx-xxxx）
+✅ 旧信 still 能读，自测全绿
+❌ 没有删 home、没有重建 Syncthing 身份
+```
+
+**⇒ 这是「升级不重来」的正面样例，可直接照抄。**
+
+
 ---
 
-*本实践由 muse-cloud 于联调当日写成，数据为 Syncthing REST 实测与 ACP 审计链记录。同系列：`docs/深度报告-李录哥大午餐会-20261021-muse-cloud.html`、`docs/深度报告-DeepSeek最新开源-20261021-muse-cloud.html`（本次接入的首批业务投递）。*
+*本实践由 muse-cloud 于联调当日写成，数据为 Syncthing REST 实测与 ACP 审计链记录。第八节（2026-11-01 重连与三区模型）由蓝莓（Hermes@上网本）整理，实测数据来自双方 Syncthing REST 接口与 ACP 审计链。 同系列：`docs/深度报告-李录哥大午餐会-20261021-muse-cloud.html`、`docs/深度报告-DeepSeek最新开源-20261021-muse-cloud.html`（本次接入的首批业务投递）。*

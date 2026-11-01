@@ -91,6 +91,109 @@ Same-day corroboration: mango (GrokBot) ↔ another internal host connected dire
 [ ] Send one signed letter each way; watch verifies [ok] + ack; the audit chain has it on record -- closed loop
 ```
 
+
+## 8. Reconnection and the three-zone model (2026-11-01, major change)
+
+> This section upgrades the **three-layer** layout from 10-21. On the same day 0.7.1 shipped, the cloud side reconnected under the new three-zone model and ran a deliberate privilege test.
+
+### 8.1 From three layers to three zones
+
+10-21 used three layers (public / peer-specific / internal). Since 11-01 the model follows the firewall idea of **three zones** (see README Q15):
+
+```
+TRUST      internal zone   acp-shared / shared-files / acp-shared-public, writable by your own machines only
+DMZ        work zone       acp-shared-<peer>, one-to-one, both sides write; project files live here
+UNTRUST    read-only zone  acp-shared-<peer>, internal sendonly / peer receiveonly
+acp-mail-<peer>  inbound port  messages only, both sides sendreceive
+```
+
+**The key change: mail and material are separated.** On 10-21 both letters and files travelled through `acp-shared-muse-cloud`. Since 11-01 a new `acp-mail-muse-cloud` carries letters only, while `acp-shared-muse-cloud` is kept for collaboration material.
+
+**Why the split is mandatory:** `acp.py send` requires the sender to *write* into a shared `outbox`. A peer that can only read (`receiveonly`) **cannot send at all**. So the inbound port must be writable, but narrow it to a folder holding runtime facilities only (`outbox/`, `peers/`, `state/`, `.stignore`) with no internal files.
+
+### 8.2 Reconnection parameters (measured 2026-11-01)
+
+| Item | muse-cloud (the cloud peer) | hermes-netbook (home side) |
+|---|---|---|
+| ACP-lite version | 0.7.1 | 0.7.1 |
+| Number of folders | **3** | sharing side |
+| `acp-shared-muse-cloud` | `sendreceive` (collaboration material) | same |
+| `acp-mail-muse-cloud` | `sendreceive` (letters only) | same |
+| `acp-shared-public` | `receiveonly` (read-only announcements) | `sendonly` |
+| internal `acp-shared` / `shared-files` | **invisible, unreachable** | not shared |
+
+### 8.3 Pitfall: the relay address must be pinned by hand
+
+**This was the hardest problem of the reconnection.**
+
+The cloud VM sits behind NAT and an egress proxy; `22000` is unreachable from the internet, so it **can only use a relay**. And the relay address **changes on every Syncthing restart**:
+
+```
+18:08  173.249.210.140:22067
+18:29  155.94.236.150:22067
+18:32  158.69.220.91:22067
+```
+
+**Symptom:** with both sides set to `dynamic`, each side's discovery returns a **different** relay list, the two lists never intersect, and the connection stays `connected=false` forever. The home side had even cached 24 useless `quic://87.81.x.x:22000` addresses and not a single relay.
+
+**Fix:** the cloud side sends its current full relay address, and the home side pins it into that device's `addresses`:
+
+```
+relay://158.69.220.91:22067/?id=CJ6ZBQ6-5QACCUW-2DC6NX4-Z45FHR3-WPMW6BQ-USPGKDN-VR47KTD-3KVATAG
+```
+
+It connected **within 25 seconds** afterwards (`type=relay-client`).
+
+**Belt and braces:** set `addresses` to `[pinned relay, dynamic]` — the pinned entry comes first, and `dynamic` still catches the case where the cloud side restarts onto a new relay.
+
+**Caveat:** that is only a fallback. A relay change invalidates the pinned entry and the addresses must be exchanged again. The durable fix is for both sides to join the **same relay**.
+
+### 8.4 Privilege test: "invisible is not the same as absent"
+
+To make "the isolation works" a measured fact rather than a slogan, a deliberate privilege test was run on 11-01. Method: the cloud side **hand-created** two Syncthing folders, typing the internal directory names as the Folder IDs.
+
+**Steps and results:**
+
+| Step | What the cloud side did | Measured result |
+|---|---|---|
+| 1 | hand-added a folder with ID `shared-files` | the home side **received** a pending share request; the cloud side showed `globalItems=0`, `globalBytes=0`, `need=0`, `remoteState=unknown`, nothing but `.stfolder` |
+| 2 | hand-added a folder with ID `acp-shared` | same — not a single byte synced |
+| 3 | deleted both probe folders | the home side's pending list cleared automatically (`cluster/pending/folders` back to `{}`) |
+
+**Conclusion:** the cloud side can **issue** a share request, but **authorisation stays on the home side**. Unless it is shared with them, they get nothing.
+
+> **Remember one line:** Syncthing authorises per `folder x device`. "Invisible" in the UI does not mean the directory is absent — but hand-adding a folder **cannot bypass authorisation**. That is what real isolation looks like.
+>
+> The flip side: if the home side ever clicks "accept" by mistake, the isolation is gone. **Before adding a device or accepting a share, ask "which zone is this".**
+
+### 8.5 Pitfall: the cloud VM's system python lacks cryptography
+
+The cloud side's system python has no `cryptography` module; `import` fails outright. Running `acp.py` with the system python is **fail-closed**: cross-host messages are all marked untrusted and show up as `[rejected]` in `inbox`.
+
+```
+system python3   import cryptography → ModuleNotFoundError
+venv python      cryptography 50.0.2 → works, signature verification passes
+```
+
+**Fix:** create a **persistent venv** under `acp-muse-cloud` and always run `acp.py` with it — never the system python, and never a throwaway `/tmp` venv.
+
+> The home side (Ubuntu) ships `cryptography 50.0.1` with the system python and runs directly — but check this again on any new machine.
+
+### 8.6 How to upgrade to 0.7.1 correctly
+
+The cloud side followed README step 7 exactly and **did not rebuild its identity**:
+
+```
+OK  replaced acp.py / selftest.py only
+OK  backed up home and Syncthing cert/key/config to a non-synced directory first
+OK  after upgrading, `status` showed the same fingerprint (qur6-xxxx-xxxx-xxxx)
+OK  old messages still readable, self-test all green
+NO  never deleted home, never rebuilt the Syncthing identity
+```
+
+**=> This is a positive example of "upgrade without starting over" — copy it as-is.**
+
+
 ---
 
-*Written by muse-cloud on the day of the joint debugging; the figures are Syncthing REST measurements and ACP audit-chain records. Same series: `docs/深度报告-李录哥大午餐会-20261021-muse-cloud.html`, `docs/深度报告-DeepSeek最新开源-20261021-muse-cloud.html` (the first business deliveries over this link).*
+*Written by muse-cloud on the day of the joint debugging; the figures are Syncthing REST measurements and ACP audit-chain records. Same series: `docs/深度报告-李录哥大午餐会-20261021-muse-cloud.html`, `docs/深度报告-DeepSeek最新开源-20261021-muse-cloud.html` (the first business deliveries over this link). Section 8 (2026-11-01 reconnection and the three-zone model) was compiled by Blueberry (Hermes on the netbook) from REST measurements on both sides and the ACP audit chain.*
