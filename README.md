@@ -77,7 +77,7 @@ python acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> 
 
 - **`--root` 不能省**：省了会默认写 `<home>/shared`，**退出码 0、看着像成功**，信却落在本机私有目录（见一、常见问题 Q5）。
 - **agent 名要跨机唯一**：两台机器不能都叫 `codex`（会覆盖名片、挤进同一个发件箱）。
-- **私钥不进共享目录**：`--root` 下只应有 `peers/`、`outbox/`、`state/`、`.stignore`（`state/` 是投递缓存，可以删，删了不丢信；`--home` 里的 `key.pem` / `userkey.json` 绝不能出现在这里）。
+- **私钥不进共享目录**：`--root` 下只应有 `peers/`、`outbox/`、`state/`、`.stignore`。其中 `state/` 是 `init` 顺手建的空目录（当前代码不读写它，删了也不影响）；**真正的投递缓存是本机 `<home>/state/seen.json`，不在共享目录**；`--home` 里的 `key.pem` / `userkey.json` 绝不能出现在共享目录。
 
 # 第四步：收发信（先跑通这条路）
 
@@ -266,7 +266,7 @@ hermes -z "只回答两个字：收到"                  # 蛋糕 → 蓝莓（�
 
 1. **产物落盘**：`dir <产物路径>` 能看到文件，大小 > 0，时间晚于本次唤醒。
 2. **审计链增长**：`python acp.py --home <acp-home> --root <shared-dir> audit` 条数 +1，最新一条 hash 对得上。
-3. **签名回执**：`outbox/<你的 agent>/` 里出现回信，且 `verify` 通过。
+3. **签名回执**：被唤醒方写的回信落在 `outbox/<被唤醒的 agent>/`（对方发件箱，你这边同步可见），且 `verify` 通过。
 
 `exit 0` 可能只是"说了话"：不落盘、不入账、不回信 = 没干。
 
@@ -331,7 +331,7 @@ ACP 写信（账本） → Syncthing 同步（传输） → 对方处理 → 回
 TRUST      内部区        它看不到（acp-shared / shared-files / acp-shared-public）
 DMZ        协作区        它读写自己的 folder（acp-shared-dmz-<队友>）
 UNTRUST    只读区        它能读不能写（acp-shared-<对端>，内部 sendonly）
-acp-mail-<对端>  收信口    它能写（只放信封 JSON）—— 它投稿就写这里
+acp-mail-<对端>  收信口    它能写 outbox/ 信件、peers/ 名片、state/、.stignore —— 它投稿就写这里（见 Q15）
 ```
 
 #### 它会连不上的三种典型原因
@@ -569,11 +569,11 @@ A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内
 | | `acp-shared-public` | 内部公告、协议说明、模板 | 内部各机 | `sendreceive` |
 | **DMZ**（中间缓冲区，多人协作） | `acp-shared-dmz-<队友>` | 与该队友协作的项目文件 | 内部 + **该队友**（一人一个 folder） | 双方 `sendreceive` |
 | **UNTRUST**（不信任区，只发不收） | `acp-shared-<对端>` | 只给对端看的材料 | 内部 + 该对端 | 内部 `sendonly`，对端 `receiveonly` |
-| **对外收信口** | `acp-mail-<对端>` | **只放** `outbox/<对端>/*.json`、`peers/`、`state/`、`.stignore`（不放任何内部文件） | 内部 + 该对端 | 双方 `sendreceive` |
+| **对外收信口** | `acp-mail-<对端>` | `outbox/`（信件 JSON）、`peers/`（名片）、`state/`（init 建的空目录）、`.stignore`；**不放任何内部文件** | 内部 + 该对端 | 双方 `sendreceive` |
 
 **为什么单独要一个 `acp-mail-<对端>`：** `acp.py send` 要求发送方能往共享 `outbox` 写文件。
 外部若只能读（`receiveonly`），它就**发不出信**——「外部投稿走 ACP」根本落不了地。
-所以**收信口必须可写**，但把它收窄到「只含运行设施的一个 folder」：`outbox/`（信件 JSON）、`peers/`（名片）、`state/`（投递缓存）、`.stignore`，里面不放任何内部文件。
+所以**收信口必须可写**，但把它收窄到「只含运行设施的一个 folder」：`outbox/`（信件 JSON）、`peers/`（名片）、`state/`（`init` 建的空目录）、`.stignore`，里面不放任何内部文件。注意外部能写的面包括 `peers/` 名片——别把这个 folder 和内部邮局混用。
 
 **外部要交材料，永远不是「写进我们的区」，是「发过来」：**
 写 ACP 信到 `acp-mail-<对端>` → 内部审核 → 由内部主机拷进 `acp-shared-dmz-<队友>` 或内部归档 → 回信告诉路径。
@@ -673,7 +673,7 @@ Muse 那边每个连接、每个 folder 都要人工点确认，不像 GrokBot �
 1. **同机不变**——原文件通道照旧；本程序不读不写 `mailbox/`。
 2. **跨机只共享目录，不共享整台机器**——Syncthing / Tailscale / 网盘 / U 盘都能当传输层。
    只有一个网内对端时，一个目录就够了；一旦接入外部 agent，就按 **Q15 的三区**分（TRUST / DMZ / UNTRUST），各自独立 folder。
-3. **私钥不进共享目录**——`--home` 是本机私有；共享目录里只有名片（`peers/`）、发件箱（`outbox/`）、投递缓存（`state/`）和 Syncthing 用的 `.stignore`，没有私钥。
+3. **私钥不进共享目录**——`--home` 是本机私有；共享目录里只有名片（`peers/`）、发件箱（`outbox/`）、`init` 建的空 `state/` 和 Syncthing 用的 `.stignore`，没有私钥。
 4. **收信不调模型**——`watch` 只落盘 + 记审计，挂机不烧 token。
 5. **缺依赖就拒收（fail-closed）**——本机没有 `cryptography` 时跨机消息**默认一律拒收**；
    自测要收只能显式加 `--allow-unsigned`，此时消息标记 `unverified` 且**永不进入 `ready`**。
