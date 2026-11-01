@@ -367,6 +367,77 @@ relay 模式下双方都注册到中继，由它牵线
 
 ---
 
+# 第七步：升级与身份保护（**升级前必读，尤其给 agent**）
+
+> **一句话：升级 = 只换代码文件，绝不碰身份。**
+> 身份文件一旦重建，Device ID 会变、指纹会变，全网每一台机器都要重新配对——**代价是几个小时，而且旧信全部失效。**
+
+## 7.1 升级只做这一件事
+
+```bash
+# 拿新版本（任选其一）
+git pull                       # 在仓库目录里
+# 或：从 Release/仓库下载新的 acp.py / selftest.py 覆盖旧的
+
+# 覆盖后先自检
+python selftest.py             # 应当全绿；有红就别往下走
+python acp.py --home <home-dir> --root <shared-dir> status   # 旧身份应当还在
+```
+
+**判断升级成功，只看这三条：**
+
+1. `python acp.py ... status` 打出来的 agent 名 / 指纹**和升级前一模一样**
+2. `<shared-dir>` 里的旧信件**还能 `inbox` / `digest` 读出来**
+3. 给对端发一封测试信，对方能正常 `watch` 到
+
+三条都过 = 升级成功。**反之立即回滚到旧文件，别在原地继续折腾。**
+
+## 7.2 这些文件**永远不要删、不要重建**
+
+| 位置 | 文件 | 删了的后果 |
+|---|---|---|
+| `<home-dir>/` | `identity.json` | **agent 身份没了，指纹变了，所有人要重新 `trust`** |
+| `<home-dir>/` | `userkey.json` | L2 人密钥丢失，放行票全部作废 |
+| `<home-dir>/` | `trusted.json` | 所有已信任对端要重新带外核对指纹 |
+| `<home-dir>/` | `audit.jsonl` | **审计链断头**，历史投递事实丢失（0.7.1 起去重靠它） |
+| `<home-dir>/` | `inbox/` `approvals/` | 已收的信件 / 已签的票，丢了要重来 |
+| Syncthing 配置目录 | `cert.pem` `key.pem` | **Device ID 变了，全网重新配对**（最难恢复的一项） |
+| Syncthing 配置目录 | `config.xml` | 设备列表、文件夹共享全丢，要手抄一遍 |
+
+**⇒ 想留后路：升级前把上面两列文件各备份一份到**非同步目录**，例如 `<home-dir>/../acp-backup-<日期>/`，别放进 `<shared-dir>`。**
+
+## 7.3 这几件事**一次都不要做**
+
+```
+❌ 删掉 <home-dir> 重新 init
+❌ 删掉 Syncthing 配置目录重装（Device ID 会变）
+❌ 不带 --home / --root 裸跑 acp.py
+   ⇒ 会在默认路径 ~/.acp-personal 下悄悄建一套新身份
+   ⇒ 症状：命令退出码 0、看着像成功，信却离群
+❌ 在 <shared-dir> 上 git reset --hard / 删库重建
+❌ 为了"干净"把共享目录整目录删掉再让对端重同步
+   ⇒ 对端会看到一片删除，历史信件全没
+❌ 换一个 --home 路径重跑 init
+```
+
+## 7.4 什么时候**才**该重建身份
+
+只有三种情况：
+
+1. 私钥泄露（`identity.json` 被外人拿到）
+2. 换机器且**确实**要换 Device ID
+3. 对方已确认退出协作，需要彻底断开
+
+**重建前必须先通知所有对端**，并把新的 Device ID + ACP 指纹**带外**发过去；重建后每一台都要重新 `trust`。
+
+## 7.5 给 agent 的固定话术（可直接照做）
+
+> 我是在升级 ACP-lite，不是重装。
+> 只替换 `acp.py` / `selftest.py`（必要时含文档），**不碰** `<home-dir>` 下的 `identity.json` / `userkey.json` / `trusted.json` / `audit.jsonl` / `inbox/` / `approvals/`，**不碰** Syncthing 的 `cert.pem` / `key.pem` / `config.xml`。
+> 升级后用 `status` 核对身份指纹与升级前一致，读一封旧信验证历史还在，再发一封测试信。
+
+---
+
 ## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 10 条踩坑 + 4 条接入方案，共 20 问）
 
 ⚠️ **先说边界**：下面每一条都来自**我们这一套特定环境** ——
