@@ -31,7 +31,7 @@ first (how to connect, how to log in, which pitfalls we hit); for "why is it des
 **"2. Appendices"** -- skip them entirely if you just want to use it.
 Placeholders: `<home-dir>` this host's **private** directory | `<shared-dir>` the directory the two machines
 **sync** | `<agent>` / `<peer-agent>` agent names.
-Program version = protocol version = **0.7.0**; the envelope format is defined by `ENVELOPE-FORMAT.md`.
+Program version = protocol version = **0.7.1**; the envelope format is defined by `ENVELOPE-FORMAT.md`.
 
 ---
 
@@ -98,7 +98,7 @@ Three rules you must keep:
 
 - **Never omit `--root`**: without it the default is `<home>/shared` -- **exit code 0, and it looks like it worked**, while the letter actually lands in this host's private directory (see FAQ Q5).
 - **Agent names must be unique across machines**: the two machines cannot both be called `codex` (they would overwrite each other's name card and crowd into the same outbox).
-- **The private key never enters the shared directory**: under `--root` there should be nothing but `peers/`, `outbox/` and `.stignore`.
+- **The private key never enters the shared directory**: under `--root` there should be nothing but `peers/`, `outbox/`, `state/` and `.stignore`. (`state/` is an empty directory that `init` creates and the code never reads or writes; the real cache is the host-local `<home>/state/seen.json`, which must not be here either. `key.pem` / `userkey.json` under `--home` must never appear here.)
 
 ## Step 4: Send and receive (get this path working first)
 
@@ -109,7 +109,7 @@ python acp.py --home <home-dir> --root <shared-dir> digest     # see everything 
 python acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
 ```
 
-**The criterion**: the message was really sent only when **a file really shows up** in `<shared-dir>/outbox/<peer-agent>/`; do not judge by the exit code alone.
+**The criterion**: your own message really shows up in `<shared-dir>/outbox/<self>/` and the peer's reply shows up in `<shared-dir>/outbox/<peer>/`; do not judge by the exit code alone.
 
 Command cheat sheet (every command takes `--home <home-dir> --root <shared-dir>`, omitted in the table):
 
@@ -137,7 +137,7 @@ python acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
 - **Autostart**: on Windows, Task Scheduler (triggered at logon); on Linux, `systemd --user` (or `crontab @reboot`); on macOS, `launchd`.
 - Writing message files / Syncthing sync / `watch` writing received mail to disk **all cost no tokens** (the `watch` process makes **zero network connections** -- there is no HTTP client anywhere in the source); the **only thing that costs is "automatically calling a model", and this program does not offer that action**.
 
-Two more things to know: **`watch` writes `<home>/state/seen.json`** (which messages it has seen; entries **expire after 7 days**) -- duplicate suppression relies on it, and **deleting `state/` makes old letters be delivered all over again**.
+Two more things to know: **`watch` writes `<home>/state/seen.json`** (which messages it has seen; entries **expire after 7 days**) -- **since 0.7.1 this is only a performance cache**: the durable de-duplication facts come from the `deliver` / `ack` events in `audit.jsonl`, so deleting `state/` or `inbox/` does **not** make old letters be delivered again (deleting the audit chain does).
 If you want autostart on Linux and have no unit file handy, here is a `systemd --user` template to follow (**this repository ships no ready-made unit -- drop your own into `~/.config/systemd/user/acp-watch.service` and adjust the paths**):
 
 ```ini
@@ -290,7 +290,7 @@ A wake-up carries only a "**pointer**" (the absolute path of the received letter
 
 1. **Artifact on disk**: `dir <artifact>` lists a file, size > 0, timestamp later than this wake-up.
 2. **Audit chain grows**: `python acp.py --home <acp-home> --root <shared-dir> audit` gains one entry, and the newest hash matches.
-3. **Signed receipt**: a reply appears under `outbox/<your-agent>/` and `verify` passes.
+3. **Signed receipt**: the woken agent's reply appears under `outbox/<woken-agent>/` (the peer's outbox, visible to you after sync) and `verify` passes.
 
 `exit 0` may merely mean "it said something": no artifact, no ledger entry, no reply = it did not do the work.
 
@@ -353,12 +353,13 @@ Cloud agent      : no doorbell -- it acts only when it or its owner triggers it
 - Device only, no `trust` -> sync works, envelopes still rejected.
 - `trust` only, no device -> envelopes are written, the peer never receives them.
 
-#### Split directories into three layers (see Q15)
+#### Split directories into three zones (see Q15)
 
 ```
-public announcements   it can read
-peer-specific area     it reads and writes
-internal areas         it cannot see
+TRUST      internal area    it cannot see (acp-shared / shared-files / acp-shared-public)
+DMZ        peer work area   it reads and writes its own folder (acp-shared-dmz-<teammate>)
+UNTRUST    read-only area   it can read, cannot write (acp-shared-<peer>, internal sendonly)
+acp-mail-<peer>  inbound port  it CAN write (outbox / peers / state / .stignore) -- submissions go here
 ```
 
 #### The three typical reasons it will not connect
@@ -395,7 +396,76 @@ Cannot: be woken over CLI / SSH; it will not start up and poll on its own
 
 ---
 
-## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 10 pitfalls + 2 cloud onboarding)
+## Step 7: Upgrading without losing your identity (**read before any upgrade, especially for agents**)
+
+> **One sentence: an upgrade replaces code files only. It never touches identity.**
+> Rebuilding identity changes the Device ID and the fingerprints, and every machine in the group must be re-paired -- **hours of work, and every old message becomes unreadable.**
+
+### 7.1 What an upgrade actually does
+
+```bash
+# get the new version (either way)
+git pull                       # inside the repo directory
+# or: download the new acp.py / selftest.py and overwrite the old ones
+
+# self-check before going on
+python selftest.py             # should be all green; if anything is red, stop
+python acp.py --home <home-dir> --root <shared-dir> status   # the old identity must still be there
+```
+
+**An upgrade succeeded if, and only if, these three hold:**
+
+1. `python acp.py ... status` prints the **same** agent name / fingerprint as before the upgrade
+2. old messages in `<shared-dir>` can still be read with `inbox` / `digest`
+3. a test message to a peer shows up on their `watch`
+
+All three pass = the upgrade worked. **Otherwise roll back to the old files immediately; do not keep experimenting in place.**
+
+### 7.2 Files you must **never** delete or rebuild
+
+| Location | File | What happens if it is gone |
+|---|---|---|
+| `<home-dir>/` | `identity.json` | **Your agent identity is gone, the fingerprint changes, everyone must `trust` you again** |
+| `<home-dir>/` | `userkey.json` | The L2 human key is lost and every release ticket becomes void |
+| `<home-dir>/` | `trusted.json` | Every trusted peer must be re-verified out-of-band |
+| `<home-dir>/` | `audit.jsonl` | **The audit chain is broken** and delivery history is lost (0.7.1 derives de-duplication facts from it) |
+| `<home-dir>/` | `inbox/` `approvals/` | Delivered messages / signed tickets; losing them means redoing the work |
+| Syncthing config dir | `cert.pem` `key.pem` | **The Device ID changes and the whole group must re-pair** (the hardest one to recover) |
+| Syncthing config dir | `config.xml` | Device list and folder shares are gone; you must retype them |
+
+**To keep a way back: before upgrading, copy those files to a directory that is NOT synced**, e.g. `<home-dir>/../acp-backup-<date>/`. Never put the backup inside `<shared-dir>`.
+
+### 7.3 Things you should **not** do, not even once
+
+```
+x  delete <home-dir> and run init again
+x  delete the Syncthing config directory and reinstall (the Device ID changes)
+x  run acp.py without --home / --root
+   => it silently creates a brand-new identity under the default path ~/.acp-personal
+   => symptom: exit code 0, looks successful, yet the message never reaches the group
+x  git reset --hard / delete-and-recreate inside <shared-dir>
+x  wipe <shared-dir> "to start clean" and let peers re-sync
+   => peers see a mass deletion and the whole message history disappears
+x  re-run init against a different --home path
+```
+
+### 7.4 The only three reasons to rebuild identity
+
+1. the private key leaked (`identity.json` seen by an outsider)
+2. moving to a new machine **and** genuinely changing the Device ID
+3. a peer has confirmed it is leaving and must be cut off completely
+
+**Before rebuilding, tell every peer**, and send the new Device ID + ACP fingerprint **out-of-band**; afterwards each machine must `trust` again.
+
+### 7.5 A ready-made instruction for agents
+
+> I am upgrading ACP-lite, not reinstalling it.
+> Replace only `acp.py` / `selftest.py` (and docs if needed). Do **not** touch `identity.json` / `userkey.json` / `trusted.json` / `audit.jsonl` / `inbox/` / `approvals/` under `<home-dir>`, and do **not** touch `cert.pem` / `key.pem` / `config.xml` under the Syncthing config directory.
+> After upgrading, check with `status` that the identity fingerprint matches the pre-upgrade value, read an old message to confirm history is intact, then send one test message.
+
+---
+
+## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 10 pitfalls + 4 onboarding designs, 20 questions in total)
 
 ⚠️ **The boundary first**: every answer below comes from **this one particular setup of ours** --
 **an Ubuntu netbook + a Win11 desktop + Syncthing + Clash (on the Windows side)**, with the agents
@@ -469,7 +539,7 @@ The cost: a foreground SSH connection **dies with the session**, so long jobs ha
 
 **Q5: Can `acp.py --root` be omitted?**
 A: **No.** When omitted it defaults to `<home>/shared` (not the shared group directory), with **exit code 0 and no error at all** -- but the letter lands in
-this host's private directory and nobody in the group ever sees it. Always write `--root <shared-dir>` explicitly when sending or replying; the criterion is that a file really shows up in `outbox/<recipient-agent>/`.
+this host's private directory and nobody in the group ever sees it. Always write `--root <shared-dir>` explicitly when sending or replying; the criterion is that your own message shows up in `outbox/<self>/` and the peer's reply shows up in `outbox/<peer>/`.
 **`--home` has a default too** (`~/.acp-personal`), and the two defaults together are the worst trap -- omit `--home` and `--root` follows it down to
 `~/.acp-personal/shared`, and the letter is off on its own again. So **write both explicitly**.
 
@@ -590,28 +660,43 @@ Only the two concrete cases are listed here:
 ### How to split directories for an external agent (Q15)
 
 **Q15: Once an external agent is on board, how should the shared directories be laid out?**
-A: **Three layers, each its own folder. Never let an external agent share a directory with internal files.**
+A: **Follow the firewall idea: three trust zones (TRUST / DMZ / UNTRUST), and split folders by purpose inside each zone. Never let an external agent share a *file area* with internal files** -- the only exception is the inbound mail port `acp-mail-<peer>`, which must be shared (otherwise the peer cannot send at all), and holds nothing but runtime facilities.
 
 Measured on 2026-10-20: an external agent could read every internal file (including a personal resume) because it shared `shared-files`.
-The fix is three Syncthing folders that do not nest:
+On 2026-11-01 this was settled as a three-zone model: **write freely inside the trust zone, collaborate with outsiders in the DMZ, let untrusted peers read only.**
 
-| folder | Holds | Visible to |
-|---|---|---|
-| `acp-shared-public` | announcements, protocol notes, collaboration rules, runbooks, templates, public name cards | internal + **every external (read-only)** |
-| `acp-shared-<peer>` | the exchange area for one external peer | internal + **that peer** (other externals cannot see it) |
-| `acp-shared` / `shared-files` | mailbox and runtime facilities / internal files | **internal only** |
+**First, one rule that governs everything: Syncthing authorises per `folder x device`; there is no sub-directory ACL.** So "who may write what" can only be cut at the folder level -- subdirectories are not a boundary.
 
-**Four hard constraints** (each one was learned the hard way):
+| Trust zone | folder | Holds | Who syncs it | folder type |
+|---|---|---|---|---|
+| **TRUST** (your own machines only) | `acp-shared` | mailbox + runtime facilities (outbox / peers / state) | internal machines | `sendreceive` |
+| | `shared-files` | internal working files | internal machines | `sendreceive` |
+| | `acp-shared-public` | internal announcements, protocol notes, templates | internal machines | `sendreceive` |
+| **DMZ** (staging area, multi-party work) | `acp-shared-dmz-<teammate>` | project files shared with that teammate | internal + **that teammate** (one folder each) | both sides `sendreceive` |
+| **UNTRUST** (read-only hand-out) | `acp-shared-<peer>` | material the peer may read | internal + that peer | internal `sendonly`, peer `receiveonly` |
+| **Inbound mail port** | `acp-mail-<peer>` | `outbox/` (message JSON), `peers/` (name cards), `state/` (an empty dir created by `init`, the code never reads or writes it; the real cache lives in the local `<home>/state/`), `.stignore` -- **no internal files** | internal + that peer | both sides `sendreceive` |
 
-1. **The three folders must be independent** -- Syncthing authorises per folder x device, not per subdirectory; once the parent is shared, permissions on a child mean nothing.
-2. **The public area is not a mailbox** -- whichever directory `--root` points at, its `outbox` is visible to everyone on that root. Keep announcements and message traffic in different roots.
+**Why a separate `acp-mail-<peer>` is unavoidable:** `acp.py send` requires the sender to *write* into a shared `outbox`.
+If the peer can only read (`receiveonly`), it **cannot send anything**, and "external peers submit over ACP" is unimplementable.
+So the inbound port **must be writable** -- but narrow it to one folder holding runtime facilities only. Note that the peer can write `peers/` name cards too, so never reuse this folder as an internal mailbox.
+
+**When an external party wants to hand over material, it is never "write into our zone", it is "send it to us":**
+send an ACP message into `acp-mail-<peer>` -> we review it -> an internal machine copies it into `acp-shared-dmz-<teammate>` or the internal archive -> we reply with the path.
+**The path in that reply may only point into DMZ or UNTRUST, never into TRUST** -- the peer cannot reach TRUST at all.
+
+**Five hard constraints** (each one was learned the hard way):
+
+1. **Folders isolate; subdirectories do not** -- once a parent is shared, permissions on a child mean nothing. For multi-party work give each teammate their own folder; do not rely on "they only write their own subdirectory".
+2. **A public area is not a mailbox** -- whichever directory `--root` points at, its `outbox` is visible to everyone on that root. Keep announcements, message traffic and file areas in separate folders.
 3. **`outbox/<agent>/` holds only `.json`** (`cli_calls.jsonl` is a log exception); large files live in the file area and the message carries only a path.
-4. **The public area accepts a fixed extension whitelist only** -- `.md .txt .json .pdf .png`; `.cmd .ps1 .exe .py .bat .sh` never. Wake-up scripts especially must stay out: if an external party can edit one, the next wake-up runs arbitrary code.
+4. **A public area accepts a fixed extension whitelist only** -- `.md .txt .json .pdf .png`; `.cmd .ps1 .exe .py .bat .sh` never. Wake-up scripts especially must stay out: if an external party can edit one, the next wake-up runs arbitrary code.
+5. **`receiveonly` is not a read permission** -- once shared, the peer can copy everything; never put sensitive material in UNTRUST. Zones are a convention, not a technical wall: before adding a device, ask "which zone is this".
 
-**Two things that are easy to miss:**
+**Three things that are easy to miss:**
 
-- **Removing a share is not a recall.** The other side already has a local copy; moving the folder out only stops updates, it does not delete theirs. The design prevents the next leak, it cannot undo the last one.
+- **Removing a share is not a recall.** The other side already has a local copy; moving the folder out only stops updates, it does not delete theirs.
 - **Changing `--root` is not the same as changing visibility.** `to` decides *who handles it*; `root` decides *who can see it*.
+- **Do not name a folder id `trust` / `dmz` / `untrust`** -- those are zones in the rules, not directory names. Keep the `acp-shared-` / `acp-mail-` prefixes and state the trust level in the docs.
 
 ### Case one: mango@GrokBot (Grok Bot) (Q16)
 
@@ -659,7 +744,7 @@ fix:      wake the VM and wait for it to reconnect (within minutes)
 **Q17: How was the second cloud agent different from the first?**
 A: **Same three-layer structure, completely different failure modes — mostly relay and platform permissions.**
 
-`muse-cloud` (Meta's cloud personal agent) was connected on 2026-10-21. The structure followed Q15, but these problems were new:
+`muse-cloud` (Meta's cloud personal agent) was connected on 2026-10-21. At that time it followed the **old three layers** of Q15 (public / peer-specific / internal), before the 2026-11-01 three-zone model existed; what follows is the onboarding process and the pitfalls. For the directory layout, the current Q15 is authoritative:
 
 **1. Relay nodes go down**
 ```

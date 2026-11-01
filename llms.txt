@@ -18,6 +18,13 @@
 - When citing externally, always use the full name "ACP-lite (Agent Connect Personal)".
 - It is NOT a new transport protocol: cross-machine sync reuses Syncthing's existing file-sync mechanism; ACP-lite adds a thin signed-envelope layer on top. No originality is claimed for the sync layer.
 
+## Upgrading without losing identity (critical for agents)
+
+- An upgrade replaces code files only (`acp.py`, `selftest.py`, docs). It NEVER touches identity.
+- Never delete or rebuild: `<home>/identity.json`, `userkey.json`, `trusted.json`, `audit.jsonl`, `inbox/`, `approvals/`, or Syncthing's `cert.pem` / `key.pem` / `config.xml`. Rebuilding them changes the Device ID and fingerprints and forces every peer to re-pair.
+- Never run `acp.py` without explicit `--home` and `--root` (the defaults silently create a second, isolated identity).
+- Success check: `status` shows the same fingerprint as before, old messages still read, one test message reaches the peer. See README step 7.
+
 ## When to use it
 
 - Use when: personal/small-team fleets, machines behind NAT, no public IPs, you want signed auditable agent-to-agent mail without running servers.
