@@ -569,11 +569,11 @@ A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内
 | | `acp-shared-public` | 内部公告、协议说明、模板 | 内部各机 | `sendreceive` |
 | **DMZ**（中间缓冲区，多人协作） | `acp-shared-dmz-<队友>` | 与该队友协作的项目文件 | 内部 + **该队友**（一人一个 folder） | 双方 `sendreceive` |
 | **UNTRUST**（不信任区，只发不收） | `acp-shared-<对端>` | 只给对端看的材料 | 内部 + 该对端 | 内部 `sendonly`，对端 `receiveonly` |
-| **对外收信口** | `acp-mail-<对端>` | `outbox/`（信件 JSON）、`peers/`（名片）、`state/`（init 建的空目录）、`.stignore`；**不放任何内部文件** | 内部 + 该对端 | 双方 `sendreceive` |
+| **对外收信口** | `acp-mail-<对端>` | `outbox/`（信件 JSON）、`peers/`（名片）、`state/`（init 建的空目录，代码不读写；真正缓存在本机 `<home>/state/`）、`.stignore`；**不放任何内部文件** | 内部 + 该对端 | 双方 `sendreceive` |
 
 **为什么单独要一个 `acp-mail-<对端>`：** `acp.py send` 要求发送方能往共享 `outbox` 写文件。
 外部若只能读（`receiveonly`），它就**发不出信**——「外部投稿走 ACP」根本落不了地。
-所以**收信口必须可写**，但把它收窄到「只含运行设施的一个 folder」：`outbox/`（信件 JSON）、`peers/`（名片）、`state/`（`init` 建的空目录）、`.stignore`，里面不放任何内部文件。注意外部能写的面包括 `peers/` 名片——别把这个 folder 和内部邮局混用。
+所以**收信口必须可写**，但把它收窄到「只含运行设施的一个 folder」：`outbox/`（信件 JSON）、`peers/`（名片）、`state/`（`init` 建的空目录，代码不读写；真正缓存在本机 `<home>/state/`）、`.stignore`，里面不放任何内部文件。注意外部能写的面包括 `peers/` 名片——别把这个 folder 和内部邮局混用。
 
 **外部要交材料，永远不是「写进我们的区」，是「发过来」：**
 写 ACP 信到 `acp-mail-<对端>` → 内部审核 → 由内部主机拷进 `acp-shared-dmz-<队友>` 或内部归档 → 回信告诉路径。
