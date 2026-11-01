@@ -88,7 +88,7 @@ python acp.py --home <home-dir> --root <shared-dir> digest     # 一屏看完待
 python acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
 ```
 
-**判据**：`<shared-dir>/outbox/<对方agent>/` 里**真有文件**才算发出去了；别只看退出码。
+**判据**：`<shared-dir>/outbox/<自己>/` 里出现了新信（自己写、对方读），且对方的 `outbox/<对方>/` 里出现回信，才算真跑通；别只看退出码。
 
 常用命令速查（都带 `--home <home-dir> --root <shared-dir>`，下表省略）：
 
@@ -442,7 +442,7 @@ A: **SSH 只递指针** —— 传一条消息，内容是"去读 `<绝对路径
 
 **Q5: `acp.py --root` 能省吗？**
 A: **不能省。** 省略时默认写 `<home>/shared`（不是群共享目录），**退出码 0、没有任何报错**，信却落在
-本机私有目录、群里谁也看不见。发信 / 回信一律显式写 `--root <shared-dir>`；判据 = `outbox/<收件 agent>/` 里真有文件。
+本机私有目录、群里谁也看不见。发信 / 回信一律显式写 `--root <shared-dir>`；判据 = 自己写的信出现在 `outbox/<自己>/`，对方的回信出现在 `outbox/<对方>/`。
 **`--home` 同样有默认值**（`~/.acp-personal`）：两个默认值叠加最能骗人 —— `--home` 一漏，`--root` 也跟着落到
 `~/.acp-personal/shared`，信照样离群。所以**两个都显式写**。
 
@@ -573,7 +573,7 @@ A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内
 
 **为什么单独要一个 `acp-mail-<对端>`：** `acp.py send` 要求发送方能往共享 `outbox` 写文件。
 外部若只能读（`receiveonly`），它就**发不出信**——「外部投稿走 ACP」根本落不了地。
-所以**收信口必须可写**，但把它收窄到「只含信封 JSON 的一个 folder」，里面不放任何内部文件。
+所以**收信口必须可写**，但把它收窄到「只含运行设施的一个 folder」：`outbox/`（信件 JSON）、`peers/`（名片）、`state/`（投递缓存）、`.stignore`，里面不放任何内部文件。
 
 **外部要交材料，永远不是「写进我们的区」，是「发过来」：**
 写 ACP 信到 `acp-mail-<对端>` → 内部审核 → 由内部主机拷进 `acp-shared-dmz-<队友>` 或内部归档 → 回信告诉路径。
@@ -673,7 +673,7 @@ Muse 那边每个连接、每个 folder 都要人工点确认，不像 GrokBot �
 1. **同机不变**——原文件通道照旧；本程序不读不写 `mailbox/`。
 2. **跨机只共享目录，不共享整台机器**——Syncthing / Tailscale / 网盘 / U 盘都能当传输层。
    只有一个网内对端时，一个目录就够了；一旦接入外部 agent，就按 **Q15 的三区**分（TRUST / DMZ / UNTRUST），各自独立 folder。
-3. **私钥不进共享目录**——`--home` 是本机私有；共享目录里只有名片（`peers/`）、发件箱（`outbox/`）和投递缓存（`state/`），没有私钥。
+3. **私钥不进共享目录**——`--home` 是本机私有；共享目录里只有名片（`peers/`）、发件箱（`outbox/`）、投递缓存（`state/`）和 Syncthing 用的 `.stignore`，没有私钥。
 4. **收信不调模型**——`watch` 只落盘 + 记审计，挂机不烧 token。
 5. **缺依赖就拒收（fail-closed）**——本机没有 `cryptography` 时跨机消息**默认一律拒收**；
    自测要收只能显式加 `--allow-unsigned`，此时消息标记 `unverified` 且**永不进入 `ready`**。
