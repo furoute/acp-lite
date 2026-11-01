@@ -52,7 +52,7 @@ except Exception:  # noqa: BLE001
     HAVE_CRYPTO = False
 
 NAME = "ACP-lite (Agent Connect Personal)"
-VERSION = "0.7.0"  # 0.7.0 = 跨主机 SSH 唤醒里程碑（信封字段与 0.6.2 相同，不改协议格式）
+VERSION = "0.7.1"  # 0.7.1 = inbox 执行事实从签名信封重算
 MAX_HOPS = 4
 REQUIRES = ("none", "read", "write", "send", "pay", "delete")
 GATED = ("write", "send", "pay", "delete")  # 必须有人签发放行票的出口动作
@@ -132,6 +132,37 @@ def fingerprint_full(pub_b64):
         return base64.b32encode(digest).decode("ascii").rstrip("=").lower()
     except Exception:  # noqa: BLE001
         return ""
+
+
+def audit_records(home):
+    """读取并校验完整审计链，返回 (records, error)。"""
+    path = Path(home) / "audit.jsonl"
+    head_path = Path(home) / "state" / "audit-head.json"
+    if not path.exists():
+        return [], "head-without-log" if head_path.exists() else None
+    records = []
+    prev = "genesis"
+    try:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        for expected_seq, line in enumerate(lines, 1):
+            rec = json.loads(line)
+            if not isinstance(rec, dict):
+                return [], "invalid-record"
+            body = {k: v for k, v in rec.items() if k != "hash"}
+            expect = hashlib.sha256(prev.encode("utf-8") + canonical(body)).hexdigest()[:32]
+            if (rec.get("seq") != expected_seq or rec.get("hash") != expect
+                    or rec.get("prev") != prev):
+                return [], "chain-broken"
+            records.append(rec)
+            prev = rec["hash"]
+        head = read_json(head_path)
+        if head_path.exists() and (
+                not isinstance(head, dict) or head.get("hash") != prev
+                or head.get("seq") != len(records)):
+            return [], "head-mismatch"
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return [], "unreadable"
+    return records, None
 
 
 def audit(home, event, **fields):
@@ -432,6 +463,15 @@ def watch_once(home, root, verbose=True, allow_unsigned=False):
     ident = load_identity(home)
     me = ident["agent"]
     seen = read_json(home / "state" / "seen.json") or {}
+    records, error = audit_records(home)
+    if error:
+        if verbose:
+            print(f"  [audit-invalid] 拒绝投递：审计链校验失败（{error}）")
+        return []
+    delivered_ids = {
+        rec.get("msg_id") for rec in records
+        if rec.get("event") in ("deliver", "ack") and rec.get("msg_id")
+    }
     outbox = root / "outbox"
     if not outbox.exists():
         return []
@@ -450,8 +490,12 @@ def watch_once(home, root, verbose=True, allow_unsigned=False):
                 if dest != me and dest != "*":
                     continue
                 x = env.get("x") if isinstance(env.get("x"), dict) else {}
+                env_id = env.get("id")
+                if (not isinstance(env_id, str) or not env_id or env_id in (".", "..")
+                        or "/" in env_id or "\\" in env_id):
+                    raise ValueError("invalid envelope id")
                 idem = str(x.get("idem") or env.get("id") or mid)
-                if idem in seen:
+                if idem in seen or env_id in delivered_ids:
                     continue
                 # 幂等不依赖 seen 上限：投递过就跳过（Muse 建议）
                 if (home / "inbox" / f"{env.get('id', mid)}.json").exists():
@@ -557,11 +601,35 @@ def cmd_watch(args):
         time.sleep(args.interval)
 
 
+def _inbox_file(home, msg_id):
+    """校验消息 id 是单层文件名，并返回大小写精确匹配的 inbox 路径。"""
+    if not msg_id or msg_id in (".", "..") or "/" in msg_id or "\\" in msg_id:
+        die("消息 id 必须是 inbox 下的单层文件名，不能包含路径分隔符或 . / ..")
+    inbox = Path(home) / "inbox"
+    path = inbox / f"{msg_id}.json"
+    if path.exists():
+        actual = next((p for p in inbox.iterdir()
+                       if p.name.casefold() == path.name.casefold()), None)
+        if actual is None or actual.name != path.name:
+            die(f"收件箱文件名与消息 id 大小写不一致：{actual.name if actual else path.name}")
+        path = actual
+    return path
+
+
+def ticket_digest(msg_id, requires, data):
+    """一票一消息一动作：摘要同时绑定消息、动作与正文。"""
+    return hashlib.sha256(canonical({
+        "msg_id": msg_id, "requires": requires, "data": data,
+    })).hexdigest()
+
+
 def _load_ticket(home, msg_id, env=None):
-    """取一张可用放行票：验签名 + 未用 + 未过期 +（给了消息则）动作摘要一致。"""
+    """取一张可用放行票：验签名 + 未用 + 未过期 + 绑定消息与动作。"""
     path = Path(home) / "approvals" / f"approved-{msg_id}.json"
     ticket = read_json(path)
     if not ticket:
+        return None
+    if ticket.get("msg_id") != msg_id:
         return None
     if ticket.get("used_at"):
         return None
@@ -579,62 +647,155 @@ def _load_ticket(home, msg_id, env=None):
     except Exception:  # noqa: BLE001
         return None
     if env is not None:
-        want = hashlib.sha256(
-            canonical((env.get("payload") or {}).get("data", ""))).hexdigest()[:16]
+        x = env.get("x") if isinstance(env.get("x"), dict) else {}
+        req = x.get("requires", "none")
+        if ticket.get("requires") != req:
+            return None
+        want = ticket_digest(msg_id, req, (env.get("payload") or {}).get("data", ""))
         if ticket.get("action_digest") != want:
             return None  # 票面动作与当前内容不符 —— 一票一动作才真正闭环
     return ticket
 
 
+def delivery_facts(home, root, path):
+    """从签名信封重算投递事实；inbox 里的 _delivery 仅作展示缓存。"""
+    path = Path(path)
+    entry = read_json(path)
+    facts = {
+        "path": path, "entry": entry, "id": path.stem, "from": None, "to": None,
+        "requires": None, "hops": None, "expires_at": None, "done_at": None,
+        "status": "rejected", "reason": "unreadable",
+        "note": "收件箱文件为空或 JSON 不可解析",
+    }
+    if not isinstance(entry, dict):
+        return facts
+    env = {k: v for k, v in entry.items() if k != "_delivery"}
+    mid = env.get("id")
+    x = env.get("x") if isinstance(env.get("x"), dict) else {}
+    facts.update({
+        "id": mid if isinstance(mid, str) and mid else path.stem,
+        "from": env.get("from"),
+        "to": env.get("to"),
+        "requires": x.get("requires"),
+        "hops": x.get("hops"),
+        "expires_at": x.get("expires_at"),
+    })
+    if not isinstance(mid, str) or not mid or path.stem != mid:
+        facts.update(status="rejected", reason="invalid-id",
+                     note=f"文件名 {path.stem} 与信封 id {mid} 不一致")
+        return facts
+    if x.get("msg_id") != mid or x.get("idem") != mid:
+        facts.update(status="rejected", reason="invalid-id",
+                     note="信封 id、x.msg_id、x.idem 不一致")
+        return facts
+    ok, reason = verify_envelope(env, root)
+    if not ok:
+        facts.update(status="rejected", reason=reason, note=f"签名校验失败：{reason}")
+        return facts
+    if trusted_fingerprint(home, env.get("from")) != (x.get("sig") or {}).get("key"):
+        facts.update(status="untrusted", reason="untrusted",
+                     note="对方指纹未核对")
+        return facts
+    me = (load_identity(home) or {}).get("agent")
+    if env.get("to") not in (me, "*"):
+        facts.update(status="rejected", reason="wrong-recipient",
+                     note=f"消息收件人是 {env.get('to')}，本机是 {me}")
+        return facts
+    try:
+        hops, max_hops = int(x.get("hops", 0)), int(x.get("max_hops", MAX_HOPS))
+    except (TypeError, ValueError):
+        facts.update(status="rejected", reason="malformed",
+                     note="hops/max_hops 不是整数")
+        return facts
+    if hops > max_hops:
+        facts.update(status="loop-guard", reason="loop-guard",
+                     note="超过最大跳数，疑为回环")
+        return facts
+    req = x.get("requires", "none")
+    if req not in REQUIRES:
+        facts.update(status="rejected", reason="invalid-requires",
+                     note=f"未知 requires 值：{req}")
+        return facts
+    records, error = audit_records(home)
+    if error:
+        facts.update(status="rejected", reason="audit-invalid",
+                     note=f"审计链校验失败：{error}")
+        return facts
+    facts["done_at"] = next(
+        (rec.get("ts") or "unknown" for rec in reversed(records)
+         if rec.get("event") == "ack" and rec.get("msg_id") == facts["id"]),
+        None,
+    )
+    if facts["done_at"]:
+        facts.update(status="ok", reason="ok", note="")
+        return facts
+    exp = parse_iso(x.get("expires_at"))
+    if exp is None:
+        facts.update(status="rejected", reason="invalid-expiry",
+                     note="expires_at 缺失或不可解析")
+        return facts
+    if now() > exp:
+        facts.update(status="expired", reason="expired",
+                     note="已过 expires_at，只能降级为人工确认")
+        return facts
+    facts.update(status="ok", reason="ok", note="")
+    return facts
+
+
 def cmd_inbox(args):
-    home = Path(args.home)
+    home, root = Path(args.home), Path(args.root)
     rows = []
     for path in sorted((home / "inbox").glob("*.json")):
-        env = read_json(path)
-        if not env:
+        facts = delivery_facts(home, root, path)
+        if not isinstance(facts["entry"], dict):
             continue
-        d = env.get("_delivery") or {}
-        if not args.all and d.get("status") != "ok":
+        displayed = "done" if facts["status"] == "ok" and facts["done_at"] else facts["status"]
+        if not args.all and displayed != "ok":
             continue
-        rows.append((env, d))
+        rows.append((facts, displayed))
     if not rows:
         print("收件箱为空（或全部为非 ok 状态；加 --all 查看全部）")
         return
-    for env, d in rows:
-        req = (env.get("x") or {}).get("requires", "none")
-        rep = (env.get("x") or {}).get("reply", "answer")
-        gate = "已放行" if req not in GATED or _load_ticket(home, env["id"], env) else "待人工放行"
-        print(f"{env['id']}  from={env.get('from'):<8} type={env.get('type'):<5} "
-              f"requires={req:<7} reply={rep:<6} [{d.get('status')}] {gate}")
+    for facts, displayed in rows:
+        env = facts["entry"]
+        req = facts["requires"] or "?"
+        rep = (env.get("x") or {}).get("reply") or "?"
+        if displayed == "done":
+            gate = "已完成"
+        elif facts["status"] != "ok":
+            gate = "已拒绝"
+        else:
+            gate = "已放行" if req not in GATED or _load_ticket(home, facts["id"], env) else "待人工放行"
+        frm, mtype = str(env.get("from") or "?"), str(env.get("type") or "?")
+        print(f"{facts['id']}  from={frm:<8} type={mtype:<5} "
+              f"requires={req:<7} reply={rep:<6} [{displayed}] {gate}")
         print(f"    {(env.get('payload') or {}).get('data', '')[:160]}")
 
 
 def cmd_digest(args):
     """省 token 用：把所有待处理消息压成一屏，一次读完，不必逐条叫模型。"""
-    home = Path(args.home)
+    home, root = Path(args.home), Path(args.root)
     rows = []
     for path in sorted((home / "inbox").glob("*.json")):
-        env = read_json(path)
-        if not isinstance(env, dict):
+        facts = delivery_facts(home, root, path)
+        if facts["status"] != "ok" or facts["done_at"]:
             continue
-        d = env.get("_delivery") or {}
-        if d.get("status") != "ok" or d.get("done_at"):
-            continue
-        rows.append((env, d))
+        rows.append(facts)
     if not rows:
         print("没有待处理消息。")
         return 0
     by_reply = {}
     print(f"待处理 {len(rows)} 条（一屏看完；每条只给一行摘要，避免逐条读全文）")
     print("-" * 72)
-    for env, d in rows[-args.limit:]:
+    for facts in rows[-args.limit:]:
+        env = facts["entry"]
         x = env.get("x") or {}
         # 没标过的历史消息如实显示"未标注"，不冒充"需回答"
         rep = x.get("reply")
         if rep not in REPLY_KINDS:
             rep = "未标注"
         by_reply[rep] = by_reply.get(rep, 0) + 1
-        req = x.get("requires", "none")
+        req = facts["requires"]
         first = " ".join(str((env.get("payload") or {}).get("data", "")).split())[:70]
         flag = {"answer": "←需回答", "ack": "←回执即可", "none": "←不用回",
                 "未标注": "←历史消息（发时还没这个标签）"}.get(rep, "")
@@ -648,65 +809,68 @@ def cmd_digest(args):
 
 def cmd_ready(args):
     """agent 取活儿用：只列真正可执行的（受 STOP / 放行票约束）。"""
-    home = Path(args.home)
+    home, root = Path(args.home), Path(args.root)
     if (home / "STOP").exists():
         print("STOP 生效中：一切出口动作已停，agent 不应处理任何消息。")
         return
     ready, blocked = [], []
     for path in sorted((home / "inbox").glob("*.json")):
-        env = read_json(path)
-        if not env:
+        facts = delivery_facts(home, root, path)
+        if facts["status"] != "ok" or facts["done_at"]:
             continue
-        d = env.get("_delivery") or {}
-        if d.get("status") != "ok":
-            continue
-        req = (env.get("x") or {}).get("requires", "none")
-        if req in GATED and not _load_ticket(home, env["id"], env):
-            blocked.append((env, req))
+        env, req = facts["entry"], facts["requires"]
+        if req in GATED and not _load_ticket(home, facts["id"], env):
+            blocked.append((facts, req))
         else:
-            ready.append(env)
-    for env in ready:
+            ready.append(facts)
+    for facts in ready:
+        env = facts["entry"]
         print(f"[可执行] {env['id']}  from={env.get('from')}  requires="
-              f"{(env.get('x') or {}).get('requires')}")
+              f"{facts['requires']}")
         print(f"    {(env.get('payload') or {}).get('data', '')[:200]}")
-    for env, req in blocked:
-        print(f"[需人放行] {env['id']}  requires={req}"
-              f"  ->  运行：acp.py approve {env['id']}")
+    for facts, req in blocked:
+        print(f"[需人放行] {facts['id']}  requires={req}"
+              f"  ->  运行：acp.py approve {facts['id']}")
     if not ready and not blocked:
         print("没有可执行消息。")
 
 
 def cmd_ack(args):
-    home = Path(args.home)
-    path = Path(home) / "inbox" / f"{args.msg_id}.json"
-    env = read_json(path)
-    if not env:
-        die(f"收件箱里没有 {args.msg_id}")
-    req = (env.get("x") or {}).get("requires", "none")
-    # 投递状态必须为 ok 才允许确认执行 —— 否则被拦下的消息（rejected / untrusted /
-    # expired / loop-guard / unverified）只要绕过 ready 直接 ack 就能"洗白"。
-    # 这是蓝莓在 2026-10-05 联调中指出来的缺口。
-    status = (env.get("_delivery") or {}).get("status")
-    if status != "ok":
-        die(f"这条消息的投递状态是 {status}，不是 ok，拒绝确认执行。\n"
-            f"      rejected / untrusted / expired / loop-guard / unverified 都不得被当成可执行任务。")
-    # STOP 是刹车，不留例外（别让人猜哪些动作"够轻"可以放行）
+    home, root = Path(args.home), Path(args.root)
+    # STOP 是刹车，必须在读取或解释任何收件箱内容之前生效。
     if (home / "STOP").exists():
         die("STOP 生效中：拒绝一切处理动作（解除后重试）")
+    _, audit_error = audit_records(home)
+    if audit_error:
+        die(f"审计链校验失败（{audit_error}），拒绝确认执行。")
+    path = _inbox_file(home, args.msg_id)
+    facts = delivery_facts(home, root, path)
+    if not isinstance(facts["entry"], dict):
+        die(f"收件箱里没有 {args.msg_id}")
+    if facts["status"] != "ok":
+        die(f"这条消息按签名信封重算后是 {facts['status']}，不是 ok，拒绝确认执行。\n"
+            f"      原因：{facts['reason']}（{facts['note']}）\n"
+            f"      收件箱中已有的放行票不能绕过签名事实校验（放行票无效）。")
+    if facts["done_at"]:
+        die(f"这条消息已于 {facts['done_at']} 确认处理，拒绝重复确认。")
+    env, req = facts["entry"], facts["requires"]
     ticket = None
     if req in GATED:
-        ticket = _load_ticket(home, args.msg_id, env)
+        ticket = _load_ticket(home, facts["id"], env)
         if not ticket:
             die(f"requires={req} 属出口动作，但放行票无效："
                 f"可能未签发 / 已用 / 已过期 / 内容与票面不符 / 签名不可信。\n"
                 f"      请重新运行：acp.py approve {args.msg_id}")
+    ack_record = audit(home, "ack", msg_id=facts["id"], requires=req,
+                       delivery=facts["status"], ticket=bool(ticket))
     if ticket:
         ticket["used_at"] = now_iso()
-        write_json(Path(home) / "approvals" / f"approved-{args.msg_id}.json", ticket)
+        write_json(Path(home) / "approvals" / f"approved-{facts['id']}.json", ticket)
+    if not isinstance(env.get("_delivery"), dict):
+        env["_delivery"] = {}
     env["_delivery"]["status"] = "done"
-    env["_delivery"]["done_at"] = now_iso()
+    env["_delivery"]["done_at"] = ack_record["ts"]
     write_json(path, env)
-    audit(home, "ack", msg_id=args.msg_id, requires=req, ticket=bool(ticket))
     print(f"已确认处理 {args.msg_id}（放行票{'已作废' if ticket else '未使用'}）")
 
 
@@ -749,17 +913,29 @@ def cmd_userkey(args):
 
 
 def cmd_approve(args):
-    home = Path(args.home)
+    home, root = Path(args.home), Path(args.root)
+    if (home / "STOP").exists():
+        die("STOP 生效中：拒绝签发放行票（解除后重试）")
+    _, audit_error = audit_records(home)
+    if audit_error:
+        die(f"审计链校验失败（{audit_error}），拒绝签发放行票。")
+    path = _inbox_file(home, args.msg_id)
+    facts = delivery_facts(home, root, path)
+    if not isinstance(facts["entry"], dict):
+        die(f"收件箱里没有 {args.msg_id}")
+    if facts["status"] != "ok":
+        die(f"这条消息按签名信封重算后是 {facts['status']}，不是 ok，拒绝签发放行票。\n"
+            f"      原因：{facts['reason']}（{facts['note']}）")
+    if facts["done_at"]:
+        die(f"这条消息已于 {facts['done_at']} 确认处理，拒绝重复签发票。")
+    if facts["id"] != args.msg_id:
+        die("放行票消息 id 与 inbox 信封不一致")
     if not HAVE_CRYPTO:
         die("需要 cryptography 才能签发放行票")
     key = read_json(home / "userkey.json")
     if not key:
         die("尚未创建 L2 人密钥：先运行 acp.py userkey")
-    path = Path(home) / "inbox" / f"{args.msg_id}.json"
-    env = read_json(path)
-    if not env:
-        die(f"收件箱里没有 {args.msg_id}")
-    req = (env.get("x") or {}).get("requires", "none")
+    env, req = facts["entry"], facts["requires"]
     priv_raw = AESGCM(_derive_key(_get_passphrase(args), b64d(key["salt"]))).decrypt(
         b64d(key["nonce"]), b64d(key["ct"]), b"acp-l2")
     priv = Ed25519PrivateKey.from_private_bytes(priv_raw)
@@ -767,14 +943,16 @@ def cmd_approve(args):
         "ticket_id": f"tk-{secrets.token_hex(4)}",
         "msg_id": args.msg_id,
         "requires": req,
-        "action_digest": hashlib.sha256(
-            canonical((env.get("payload") or {}).get("data", ""))).hexdigest()[:16],
+        "action_digest": ticket_digest(
+            args.msg_id, req, (env.get("payload") or {}).get("data", "")),
         "issued_at": now_iso(),
         "expires_at": (now() + datetime.timedelta(seconds=args.ttl)).isoformat(timespec="seconds"),
         "issuer": f"human@{os.environ.get('COMPUTERNAME') or _nodename()}",
         "l2_key": key["fingerprint"],
         "used_at": None,
     }
+    if ticket["msg_id"] != args.msg_id:
+        die("放行票消息 id 校验失败")
     ticket["sig"] = b64e(priv.sign(canonical(ticket)))
     pub = Ed25519PublicKey.from_public_bytes(b64d(key["pub"]))
     pub.verify(b64d(ticket["sig"]), canonical({k: v for k, v in ticket.items() if k != "sig"}))
@@ -798,23 +976,15 @@ def cmd_stop(args):
 
 
 def cmd_audit(args):
-    path = Path(args.home) / "audit.jsonl"
-    if not path.exists():
+    records, error = audit_records(args.home)
+    if not records and not error:
         print("（暂无审计记录）")
         return
-    lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    prev = "genesis"
-    bad = 0
-    for line in lines:
-        rec = json.loads(line)
-        body = {k: v for k, v in rec.items() if k != "hash"}
-        expect = hashlib.sha256(prev.encode("utf-8") + canonical(body)).hexdigest()[:32]
-        if rec.get("hash") != expect or rec.get("prev") != prev:
-            bad += 1
-        prev = rec.get("hash", prev)
-    print(f"审计链共 {len(lines)} 条，校验{'通过 ✅' if not bad else f'失败 ❌（{bad} 处断裂）'}")
-    for line in lines[-args.tail:]:
-        rec = json.loads(line)
+    if error:
+        print(f"审计链校验失败 ❌（{error}）")
+        return
+    print(f"审计链共 {len(records)} 条，校验通过 ✅")
+    for rec in records[-args.tail:]:
         print(f"  #{rec.get('seq')} {rec.get('ts')} {rec.get('event')} "
               f"{ {k: v for k, v in rec.items() if k not in ('seq', 'ts', 'event', 'prev', 'hash')} }")
 

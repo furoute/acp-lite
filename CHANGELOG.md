@@ -1,5 +1,25 @@
 # ACP-lite 变更对照表 · v0.4 → v0.7.0（含 v0.7 字段级待定项）
 
+## 〇之八、v0.7.1 候选修复（2026-11-01，未发布）
+
+> 承接 DSH 第二轮独立验收。本节只记录候选分支上的安全修复，不表示已发布。
+
+| # | 修复 | 说明 |
+|---|---|---|
+| S-1 | **放行票绑定消息与动作** | 票的签名正文继续覆盖票面全部字段；`action_digest` 改为覆盖 `(msg_id, requires, data)`，`_load_ticket` 同时逐项核对 `msg_id` 与 `requires`，不能把同一正文的票复制给另一消息或改为 delete 等动作 |
+| S-2 | **完成事实迁到审计链** | `delivery_facts` 只从完整审计链中的 `ack` 事件得出 `done_at`；`_delivery.done_at` 仅作展示。`ack` / `approve` 均先校验链、再执行；删未签名缓存不能重放，伪造 `_delivery.done_at` 不能隐藏待办 |
+| S-3 | **approve 走统一安全入口** | `approve` 开头执行 STOP、单层 id + 大小写、签名信封事实重算；不存在的、非 `ok` 的、无签名的或已完成的消息都不签票 |
+| S-4 | **投递去重不依赖 seen** | `watch` 用审计链中的 `deliver` / `ack` 事件作持久去重事实，`state/seen.json` 仅保留为性能缓存；删 inbox + 清 seen 不再触发同一信封重投 |
+
+兼容性说明：`delivery_facts` 要求 `x.expires_at` 存在且可解析；旧信封缺失该字段会以
+`invalid-expiry` 拒收。这是相对早期版本的 fail-closed 收紧，旧消息升级前需确认该字段。
+
+旧票兼容性：0.7.0 已签发但未使用的放行票在 0.7.1 会失效，升级后需重新 approve。旧票的
+`action_digest` 是 16 hex 且只绑 `data`；0.7.1 要求全长摘要并绑 `(msg_id, requires, data)`。
+
+边界限定：上述“伪造 `_delivery.done_at` 不能隐藏待办”只针对缓存字段。能写 home 的本地进程
+仍可追加假 `ack` 隐藏待办；审计链防的是误改/半吊子篡改，不是防同权限的恶意进程。
+
 ## 〇之七、v0.7.0（2026-10-15 跨主机 SSH 唤醒里程碑）
 
 > **质变点**：从"**同主机** agent 互通"跃到"**同一局域网跨主机**唤起 agent" ——
