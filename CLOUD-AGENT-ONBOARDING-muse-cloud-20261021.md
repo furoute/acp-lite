@@ -122,31 +122,52 @@ acp-mail-<peer>  inbound port  messages only, both sides sendreceive
 | `acp-shared-public` | `receiveonly` (read-only announcements) | `sendonly` |
 | internal `acp-shared` / `shared-files` | **invisible, unreachable** | not shared |
 
-### 8.3 Pitfall: the relay address must be pinned by hand
+### 8.3 Pitfall: the relay changes on every restart -- **keep `dynamic`, do not pin it**
 
-**This was the hardest problem of the reconnection.**
+**This was the hardest problem of the reconnection, and it cost two wrong turns.**
 
-The cloud VM sits behind NAT and an egress proxy; `22000` is unreachable from the internet, so it **can only use a relay**. And the relay address **changes on every Syncthing restart**:
+The cloud VM sits behind NAT and an egress proxy; `22000` is unreachable from the internet, so it **can only use a relay**. And the relay changes on **every Syncthing restart**. Four times in a single day:
 
 ```
 18:08  173.249.210.140:22067
 18:29  155.94.236.150:22067
 18:32  158.69.220.91:22067
+20:23  107.172.199.241:22067   <- changed again on the third restart
 ```
 
-**Symptom:** with both sides set to `dynamic`, each side's discovery returns a **different** relay list, the two lists never intersect, and the connection stays `connected=false` forever. The home side had even cached 24 useless `quic://87.81.x.x:22000` addresses and not a single relay.
+**First attempt (wrong): pin the relay by hand.**
 
-**Fix:** the cloud side sends its current full relay address, and the home side pins it into that device's `addresses`:
+Both sides were on `dynamic` but would not connect -- the netbook had cached 24 useless `quic://87.81.x.x:22000` addresses and not a single relay. So the current relay was pinned by hand:
 
 ```
 relay://158.69.220.91:22067/?id=CJ6ZBQ6-5QACCUW-2DC6NX4-Z45FHR3-WPMW6BQ-USPGKDN-VR47KTD-3KVATAG
 ```
 
-It connected **within 25 seconds** afterwards (`type=relay-client`).
+It connected within 25 seconds (`type=relay-client`) -- **but the fix lasted less than two hours.** The cloud side restarted at 20:23, the relay moved to `107.172.199.241`, the pinned entry went stale, and the connection dropped again.
 
-**Belt and braces:** set `addresses` to `[pinned relay, dynamic]` — the pinned entry comes first, and `dynamic` still catches the case where the cloud side restarts onto a new relay.
+**Second attempt (right): go back to `dynamic` and let discovery do its job.**
 
-**Caveat:** that is only a fallback. A relay change invalidates the pinned entry and the addresses must be exchanged again. The durable fix is for both sides to join the **same relay**.
+Changing `addresses` from `[pinned relay, dynamic]` to `["dynamic"]` reconnected **automatically within 75 seconds**, confirmed by the log:
+
+```
+20:28:05  Established secure connection to X24QB7L
+          at ...-107.172.199.241:22067/relay-client
+          Device X24QB7L = syncthing v2.1.7 named "htch-runtime"
+```
+
+**=> Final conclusion: for cloud peers whose relay drifts, keep `addresses` on `dynamic` and do not pin it.**
+
+| Approach | Time to first connect | After the peer restarts | Verdict |
+|---|---|---|---|
+| Pinned relay | 25 s | **immediately stale, addresses must be exchanged again** | do not use |
+| `dynamic` | 1-2 min (discovery -> rendezvous) | **finds the new relay by itself** | use this |
+
+**Why the first `dynamic` attempt failed and the second worked:**
+The first failure was not `dynamic`'s fault. The netbook had cached a set of stale `quic://87.81.x.x` addresses and never refreshed them. Once that cache was refreshed, `dynamic` worked normally.
+
+**=> Rule of thumb: when `dynamic` will not connect, first check whether discovery is holding a pile of useless cached addresses -- suspect the cache, not `dynamic` itself.**
+
+**=> Cost: with `dynamic` the first connection takes 1-2 minutes (discovery registration + relay rendezvous). That is normal, not a fault.**
 
 ### 8.4 Privilege test: "invisible is not the same as absent"
 

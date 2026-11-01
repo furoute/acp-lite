@@ -122,31 +122,52 @@ acp-mail-<对端>  收信口  专走信件，双方 sendreceive
 | `acp-shared-public` | `receiveonly`（只读公告） | `sendonly` |
 | 内部 `acp-shared` / `shared-files` | **不可见、不可达** | 不共享 |
 
-### 8.3 踩坑：relay 地址必须手工写死
+### 8.3 踩坑：relay 每次重启都换 → **结论是保持 `dynamic`，别写死**
 
-**这是本次重连最大的坑。**
+**这是本次重连最大的坑，而且走了两趟弯路。**
 
-云端 VM 在 NAT + 出口代理后面，`22000` 从公网打不进来，**只能走 relay**。而 relay 地址**每次重启 Syncthing 都会换**：
+云端 VM 在 NAT + 出口代理后面，`22000` 从公网打不进来，**只能走 relay**。而 relay 地址**每次重启 Syncthing 都会换**。同一天内换了四次：
 
 ```
 18:08  173.249.210.140:22067
 18:29  155.94.236.150:22067
 18:32  158.69.220.91:22067
+20:23  107.172.199.241:22067   ← 第三次重启后又换了
 ```
 
-**症状：** 双方 `addresses` 都设 `dynamic` 时，各自的 discovery 会拿到**不同的** relay 列表，两边没有交集，于是永远 `connected=false`。上网本侧甚至缓存了 24 条 `quic://87.81.x.x:22000` 的无效地址，一条 relay 都没有。
+**第一趟（错的）：手工写死 relay。**
 
-**解法：** 云端侧把当前完整 relay 地址发过来，家庭侧手工填进该设备的 `addresses`：
+当时双方 `addresses` 都是 `dynamic`，但连不上——上网本侧缓存了 24 条 `quic://87.81.x.x:22000` 的无效地址，一条 relay 都没有。于是手工填了当时那条：
 
 ```
 relay://158.69.220.91:22067/?id=CJ6ZBQ6-5QACCUW-2DC6NX4-Z45FHR3-WPMW6BQ-USPGKDN-VR47KTD-3KVATAG
 ```
 
-填完 **25 秒内**就连上了（`type=relay-client`）。
+填完 25 秒内就连上了（`type=relay-client`）——**但只维持了不到两小时**。云端 20:23 重启，relay 换成 `107.172.199.241`，写死那条立刻失效，连接再次断开。
 
-**保险做法：** `addresses` 写成 `[手工 relay, dynamic]` —— 手工的排前面，云端万一重启换了 relay，`dynamic` 还能兜底。
+**第二趟（对的）：改回 `dynamic`，让 discovery 自己找。**
 
-**注意：** 这只是兜底。relay 一换，手工那条就失效，仍需重新交换地址。真正稳定的做法是让双方都加入**同一个 relay**。
+把 `addresses` 从 `[写死的 relay, dynamic]` 改成 `["dynamic"]`，**75 秒后自动连上**，日志确认：
+
+```
+20:28:05  Established secure connection to X24QB7L
+          at ...-107.172.199.241:22067/relay-client
+          Device X24QB7L = syncthing v2.1.7 named "htch-runtime"
+```
+
+**⇒ 最终结论：对云端这类 relay 会漂移的对端，`addresses` 保持 `dynamic`，不要写死。**
+
+| 做法 | 首次连上 | 对端重启后 | 结论 |
+|---|---|---|---|
+| 写死 relay | 25 秒 | **立刻失效，要重新交换地址** | ❌ 不采用 |
+| `dynamic` | 1–2 分钟（discovery → rendezvous） | **自动找到新 relay** | ✅ 采用 |
+
+**为什么第一次 `dynamic` 没成功、第二次成了：**
+第一次失败不是 `dynamic` 的问题，是上网本缓存了一批过期的 `quic://87.81.x.x` 地址、且从未刷新。那批缓存被刷新之后，`dynamic` 就正常工作了。
+
+**⇒ 判断标准：`dynamic` 连不上时，先查 discovery 缓存里有没有一堆没用的地址，怀疑缓存而不是怀疑 `dynamic` 本身。**
+
+**⇒ 代价：`dynamic` 首次连接要等 1–2 分钟（discovery 登记 + relay rendezvous）。这属于正常，不是故障。**
 
 ### 8.4 越权实测：「看不见 ≠ 不存在」
 
