@@ -895,3 +895,11 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
   `! [rejected] ... (fetch first)` 时先 `git pull --rebase`，再推送。
 - 受限环境可能禁止直接访问 GitHub 的 SSH 端口。作为特殊情况，可通过本机代理转发到
   `ssh.github.com:443`；具体代理命令按运行环境配置，不要把代理凭据写进仓库。
+
+---
+
+## 相关项目
+
+- **Workshop（杂货铺）**：https://github.com/furoute/workshop —— 同作者的小工具、Agent 技能合集，其中和本项目最相关的两项：
+  - **自建知识库（self-hosted-kb）**：https://github.com/furoute/workshop/tree/main/skills/self-hosted-kb —— 把一堆 Office/PDF 做成可检索、可点开原件的本地 RAG（FTS5 + 向量双路），v4.0，MIT。
+  - **Everything 文件检索（everything-http-search）**：https://github.com/furoute/workshop/tree/main/skills/everything-http-search —— 不点 UI、走 HTTP API 秒级查 Windows 本地文件，给 agent 加"找文件"能力。

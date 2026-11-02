@@ -36,3 +36,6 @@
 - English README: https://github.com/furoute/acp-lite/blob/main/README-EN.md
 - Envelope format: https://github.com/furoute/acp-lite/blob/main/ENVELOPE-FORMAT.md
 - License: MIT
+- Workshop (companion repo): https://github.com/furoute/workshop — small tools and agent skills by the same author, including:
+  - self-hosted-kb: https://github.com/furoute/workshop/tree/main/skills/self-hosted-kb — turn Office/PDF piles into a searchable local RAG (FTS5 + vectors), v4.0, MIT.
+  - everything-http-search: https://github.com/furoute/workshop/tree/main/skills/everything-http-search — query Windows local files over HTTP via Everything, millisecond file lookup for agents.
