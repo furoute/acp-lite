@@ -933,3 +933,11 @@ Cautions:
 - A restricted environment may block outbound SSH to GitHub. As a special case, route
   through a local proxy to `ssh.github.com:443`; configure that command for the
   environment and never put proxy credentials in the repository.
+
+---
+
+## Related projects
+
+- **Workshop**: https://github.com/furoute/workshop -- small tools and agent skills by the same author. The two most relevant to this project:
+  - **self-hosted-kb**: https://github.com/furoute/workshop/tree/main/skills/self-hosted-kb -- turn a pile of Office/PDF files into a searchable local RAG whose results open the original file (FTS5 + vector dual path), v4.0, MIT.
+  - **everything-http-search**: https://github.com/furoute/workshop/tree/main/skills/everything-http-search -- query Windows local files over the Everything HTTP API instead of clicking a UI, millisecond file lookup for agents.
