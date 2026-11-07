@@ -34,7 +34,7 @@
 
 - GitHub: https://github.com/furoute/acp-lite
 - English README: https://github.com/furoute/acp-lite/blob/main/README-EN.md
-- Envelope format: https://github.com/furoute/acp-lite/blob/main/ENVELOPE-FORMAT.md
+- Envelope format: https://github.com/furoute/acp-lite/blob/main/docs/zh/信封格式.md
 - License: MIT
 - Workshop (companion repo): https://github.com/furoute/workshop — small tools and agent skills by the same author, including:
   - self-hosted-kb: https://github.com/furoute/workshop/tree/main/skills/self-hosted-kb — turn Office/PDF piles into a searchable local RAG (FTS5 + vectors), v4.0, MIT.
