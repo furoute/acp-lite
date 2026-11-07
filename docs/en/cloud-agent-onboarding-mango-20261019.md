@@ -71,7 +71,7 @@ Mango cloned the repository, created a virtual environment, installed dependenci
 
 ```bash
 cd /workspace/acp-lite
-.venv/bin/python acp.py --home /home/box/acp-home --root /home/box/acp-shared init \
+.venv/bin/python ../scripts/acp.py --home /home/box/acp-home --root /home/box/acp-shared init \
   --agent mango --display-name "Mango@GrokBot"
 ```
 

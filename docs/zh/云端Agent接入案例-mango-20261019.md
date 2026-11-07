@@ -66,7 +66,7 @@ Syncthing 的 Device ID 是**机器级**身份，ACP 指纹是**Agent 身份**�
 
 ```bash
 cd /workspace/acp-lite
-.venv/bin/python acp.py --home /home/box/acp-home \
+.venv/bin/python ../scripts/acp.py --home /home/box/acp-home \
   --root /home/box/acp-shared init \
   --agent mango --display-name 芒果@GrokBot
 ```

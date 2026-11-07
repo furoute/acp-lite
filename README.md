@@ -23,7 +23,7 @@
 **怎么读**：本文的**第一读者是 AI Agent** —— 正文按「做什么 → 照抄命令 → 判据」组织，每一步都能直接执行、就地验收；人类只需把仓库链接交给 agent。
 遇到问题先查 **一、常见问题（FAQ）**（怎么连、怎么登、踩过哪些坑）；想了解"为什么这么设计"再看 **二、附录**，照着用可以一眼不看。
 占位符：`<home-dir>` 本机**私有**目录 ｜ `<shared-dir>` 两台机**同步**的目录 ｜ `<agent>` / `<对方agent>` agent 名。
-程序版本 = 协议版本 = **0.7.1**；信封格式以 `ENVELOPE-FORMAT.md` 为准。
+程序版本 = 协议版本 = **0.7.1**；信封格式以 `docs/zh/信封格式.md` 为准。
 
 ---
 
@@ -39,7 +39,7 @@ pip install cryptography
 
 ```powershell
 winget install Syncthing.Syncthing          # Windows；Linux/macOS 走包管理器或官网下载
-python acp-deviceid.py --config <syncthing-home>/config.xml   # 打印本机 Device ID（不依赖 Syncthing 可执行文件）
+python scripts/acp-deviceid.py --config <syncthing-home>/config.xml   # 打印本机 Device ID（不依赖 Syncthing 可执行文件）
 ```
 
 `<syncthing-home>` = Syncthing 配置目录（含 `config.xml`）：Windows 例 `%USERPROFILE%\acp-home\syncthing`、Linux/macOS 例 `~/.config/syncthing`。
@@ -57,13 +57,13 @@ python acp-deviceid.py --config <syncthing-home>/config.xml   # 打印本机 Dev
 
 ```bash
 # 建身份。--home 是本机私有目录（含私钥，绝不进同步目录）；--root 是 Syncthing 同步的那个目录
-python acp.py --home <home-dir> --root <shared-dir> init --agent <agent> --display "Codex@台式机"
+python scripts/acp.py --home <home-dir> --root <shared-dir> init --agent <agent> --display "Codex@台式机"
 
 # 打印本机指纹
-python acp.py --home <home-dir> --root <shared-dir> status
+python scripts/acp.py --home <home-dir> --root <shared-dir> status
 
 # 带外核对对方指纹（当面 / 口头，不能靠网络），再信任
-python acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> --fingerprint xxxx-xxxx-xxxx-xxxx
+python scripts/acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> --fingerprint xxxx-xxxx-xxxx-xxxx
 ```
 
 占位符按平台替换：Windows 例 `--home %USERPROFILE%\acp-home --root %USERPROFILE%\acp-shared`；Linux / macOS 例 `--home ~/acp-home --root ~/acp-shared`。
@@ -82,10 +82,10 @@ python acp.py --home <home-dir> --root <shared-dir> trust --agent <对方agent> 
 # 第四步：收发信（先跑通这条路）
 
 ```bash
-python acp.py --home <home-dir> --root <shared-dir> send --to <对方agent> --text "第一条测试消息" --reply answer
-python acp.py --home <home-dir> --root <shared-dir> inbox      # 对端
-python acp.py --home <home-dir> --root <shared-dir> digest     # 一屏看完待处理（省 token 的收信方式）
-python acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
+python scripts/acp.py --home <home-dir> --root <shared-dir> send --to <对方agent> --text "第一条测试消息" --reply answer
+python scripts/acp.py --home <home-dir> --root <shared-dir> inbox      # 对端
+python scripts/acp.py --home <home-dir> --root <shared-dir> digest     # 一屏看完待处理（省 token 的收信方式）
+python scripts/acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
 ```
 
 **判据**：`<shared-dir>/outbox/<自己>/` 里出现了新信（自己写、对方读），且对方的 `outbox/<对方>/` 里出现回信，才算真跑通；别只看退出码。
@@ -94,23 +94,23 @@ python acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
 
 | 命令 | 作用 |
 |---|---|
-| `acp.py ... status` | 看身份 / 信任 / 收件箱 / 刹车状态，打印本机指纹 |
-| `acp.py ... send --to <对方agent> --text "..."` | 投递一条；`--to '*'` = 广播；`--reply none` = 不用回（默认 `auto`） |
-| `acp.py ... send --reply-to <msg_id> ...` | 回信（自动 `hops+1`） |
-| `acp.py ... inbox` | 列出收件箱（加 `--all` 含非 ok） |
-| `acp.py ... ready` | 只列**真正可执行**的消息（受 STOP 与放行票约束） |
-| `acp.py ... send` 的 `--reply` | `none` / `ack` / `answer`，**只是个省 token 的信封标签**（收方不用读正文就能过滤）；**它不会自动回执** —— 回执仍要对方主动发 |
-| `acp.py ... digest` | 把待处理消息压成一屏 —— **省 token 的收信方式**（默认只显示最近 **30** 条，`--limit` 可调） |
-| `acp.py ... ack <msg_id>` | 确认已处理 = **结案**：投递状态改 `done`、**作废放行票**、从 `digest` 消失；**只对 `ok` 状态有效**，`untrusted` / `expired` 等一律拒绝 |
-| `acp.py ... watch --loop --interval 3` | 常驻投递（只搬文件、不调模型，挂机不烧 token）；会把见过的消息记进 `<home>/state/seen.json` |
-| `acp.py ... audit` | 校验并查看哈希链审计 |
-| `python selftest.py` | 离线跑一整套自测（闸门 / 刹车 / 伪造放行票 / 坏消息隔离），不需要网络 |
-| `python acp_net.py --syncthing-home <syncthing-home> status` | 看网络档位 + 实际走直连还是中继 |
+| `scripts/acp.py ... status` | 看身份 / 信任 / 收件箱 / 刹车状态，打印本机指纹 |
+| `scripts/acp.py ... send --to <对方agent> --text "..."` | 投递一条；`--to '*'` = 广播；`--reply none` = 不用回（默认 `auto`） |
+| `scripts/acp.py ... send --reply-to <msg_id> ...` | 回信（自动 `hops+1`） |
+| `scripts/acp.py ... inbox` | 列出收件箱（加 `--all` 含非 ok） |
+| `scripts/acp.py ... ready` | 只列**真正可执行**的消息（受 STOP 与放行票约束） |
+| `scripts/acp.py ... send` 的 `--reply` | `none` / `ack` / `answer`，**只是个省 token 的信封标签**（收方不用读正文就能过滤）；**它不会自动回执** —— 回执仍要对方主动发 |
+| `scripts/acp.py ... digest` | 把待处理消息压成一屏 —— **省 token 的收信方式**（默认只显示最近 **30** 条，`--limit` 可调） |
+| `scripts/acp.py ... ack <msg_id>` | 确认已处理 = **结案**：投递状态改 `done`、**作废放行票**、从 `digest` 消失；**只对 `ok` 状态有效**，`untrusted` / `expired` 等一律拒绝 |
+| `scripts/acp.py ... watch --loop --interval 3` | 常驻投递（只搬文件、不调模型，挂机不烧 token）；会把见过的消息记进 `<home>/state/seen.json` |
+| `scripts/acp.py ... audit` | 校验并查看哈希链审计 |
+| `python scripts/selftest.py` | 离线跑一整套自测（闸门 / 刹车 / 伪造放行票 / 坏消息隔离），不需要网络 |
+| `python scripts/acp_net.py --syncthing-home <syncthing-home> status` | 看网络档位 + 实际走直连还是中继 |
 
 # 第五步：常驻投递（挂机零 token）
 
 ```bash
-python acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
+python scripts/acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
 ```
 
 - 开机自启：Windows 任务计划程序（登录触发）；Linux `systemd --user`（或 `crontab @reboot`）；macOS `launchd`。
@@ -165,7 +165,7 @@ New-NetFirewallRule -Name OpenSSH-Server-In-TCP-LAN -DisplayName 'OpenSSH Server
 sudo apt install openssh-server        # macOS 已自带 OpenSSH
 ```
 
-唤醒前先跑 `python acp.py --home <acp-home> --root <shared-dir> ready`；**`STOP` 存在就别叫** —— 刹车优先于任务。
+唤醒前先跑 `python scripts/acp.py --home <acp-home> --root <shared-dir> ready`；**`STOP` 存在就别叫** —— 刹车优先于任务。
 
 唤醒命令（提示词**走文件 + stdin**，中文和特殊字符都不会被 shell 弄坏）：
 
@@ -265,7 +265,7 @@ hermes -z "只回答两个字：收到"                  # 蛋糕 → 蓝莓（�
 **验收判据：三样都成立才算唤醒成功，不看退出码。**
 
 1. **产物落盘**：`dir <产物路径>` 能看到文件，大小 > 0，时间晚于本次唤醒。
-2. **审计链增长**：`python acp.py --home <acp-home> --root <shared-dir> audit` 条数 +1，最新一条 hash 对得上。
+2. **审计链增长**：`python scripts/acp.py --home <acp-home> --root <shared-dir> audit` 条数 +1，最新一条 hash 对得上。
 3. **签名回执**：被唤醒方写的回信落在 `outbox/<被唤醒的 agent>/`（对方发件箱，你这边同步可见），且 `verify` 通过。
 
 `exit 0` 可能只是"说了话"：不落盘、不入账、不回信 = 没干。
@@ -372,6 +372,34 @@ relay 模式下双方都注册到中继，由它牵线
 > **一句话：升级 = 只换代码文件，绝不碰身份。**
 > 身份文件一旦重建，Device ID 会变、指纹会变，全网每一台机器都要重新配对——**代价是几个小时，而且旧信全部失效。**
 
+## 仓库结构
+
+```
+acp-lite/
+├── scripts/      协议实现与工具
+│   ├── acp.py            主程序：身份、投递、放行、审计（单文件，无第三方依赖）
+│   ├── selftest.py       端到端自测（两机模拟，81 项）
+│   ├── acp_net.py        联网档位切换（内网直连 / 走中继）
+│   ├── acp_mail.py       邮箱通道（公网邮箱当房间）
+│   ├── acp_probe.py      链路探针：记录自动换路的时间线
+│   ├── acp_latency.py    跨机延迟实测（不看 ICMP，看对端缺多少字节）
+│   ├── acp-deviceid.py   生成 Syncthing 设备 ID
+│   ├── lan-find.sh       按 MAC 找 IP
+│   ├── host-find.sh      按 hostname 找 IP（跨网段、不怕 MAC 随机化）
+│   ├── synctest.py       大文件同步测速
+│   └── push-acp.cmd      Windows 静默 push 包装
+├── docs/
+│   ├── CHANGELOG.md      变更记录
+│   ├── zh/               中文：部署手册、信封格式、云端接入案例
+│   └── en/               英文：接入案例、致谢
+├── assets/       架构图（中英各 SVG + PNG）
+├── llms.txt      给 AI 读的项目摘要
+└── README.md / README-EN.md
+```
+
+所有命令都从**仓库根目录**执行，脚本路径写作 `scripts/xxx`。
+例：`python scripts/acp.py --home <home> --root <shared> status`
+
 ## 7.1 升级只做这一件事
 
 ```bash
@@ -380,13 +408,13 @@ git pull                       # 在仓库目录里
 # 或：从 Release/仓库下载新的 acp.py / selftest.py 覆盖旧的
 
 # 覆盖后先自检
-python selftest.py             # 应当全绿；有红就别往下走
-python acp.py --home <home-dir> --root <shared-dir> status   # 旧身份应当还在
+python scripts/selftest.py             # 应当全绿；有红就别往下走
+python scripts/acp.py --home <home-dir> --root <shared-dir> status   # 旧身份应当还在
 ```
 
 **判断升级成功，只看这三条：**
 
-1. `python acp.py ... status` 打出来的 agent 名 / 指纹**和升级前一模一样**
+1. `python scripts/acp.py ... status` 打出来的 agent 名 / 指纹**和升级前一模一样**
 2. `<shared-dir>` 里的旧信件**还能 `inbox` / `digest` 读出来**
 3. 给对端发一封测试信，对方能正常 `watch` 到
 
@@ -498,7 +526,7 @@ ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519 -N ""
 type %USERPROFILE%\.ssh\id_ed25519.pub | ssh <对端用户名>@<对端局域网IP> "cat >> .ssh/authorized_keys"
 ```
 
-- **别搞混两套标识**：Syncthing 的 Device ID 是**机器级**（一台机一个，`python acp-deviceid.py` 可算），
+- **别搞混两套标识**：Syncthing 的 Device ID 是**机器级**（一台机一个，`python scripts/acp-deviceid.py` 可算），
   ACP 的 agent 指纹是**身份级**（每个 agent 各一个）。
 - 登上去以后要**唤醒某台机器**，命令见 **第六步**；SSH 只负责"敲门"，账本仍归 ACP。
 - 两个已知不一致，别踩：**收信**只要防火墙放行 22 **且**对端 `sshd` 在跑（`Get-Service sshd`）；
@@ -511,7 +539,7 @@ A: **SSH 只递指针** —— 传一条消息，内容是"去读 `<绝对路径
 
 ### 踩坑（Q5 → Q13）
 
-**Q5: `acp.py --root` 能省吗？**
+**Q5: `scripts/acp.py --root` 能省吗？**
 A: **不能省。** 省略时默认写 `<home>/shared`（不是群共享目录），**退出码 0、没有任何报错**，信却落在
 本机私有目录、群里谁也看不见。发信 / 回信一律显式写 `--root <shared-dir>`；判据 = 自己写的信出现在 `outbox/<自己>/`，对方的回信出现在 `outbox/<对方>/`。
 **`--home` 同样有默认值**（`~/.acp-personal`）：两个默认值叠加最能骗人 —— `--home` 一漏，`--root` 也跟着落到
@@ -556,7 +584,7 @@ CLI 唤醒照样 18 秒跑完并写进工作区外）。例外只有"接管已�
 **Q11: 同一个 WiFi，Syncthing 却显示"中继"？**
 A: 局域网发现被挡了，先查 **TUN / 代理**。判据看 Syncthing 界面的「连接类型」：**TCP 局域网 = 直连**、
 **中继 = 跨网的正常状态**，**同一 WiFi 却显示中继 = 异常**。换网后嫌慢别干等 —— 实测被动等约 **4 分 50 秒**，
-主动 `python acp_net.py --syncthing-home <syncthing-home> kick` 约 **2 秒**。
+主动 `python scripts/acp_net.py --syncthing-home <syncthing-home> kick` 约 **2 秒**。
 
 **Q12: Windows 上 Syncthing 全员配置正确，就是永远连不上？**
 A: 八成是 **`ALL_PROXY`**。Syncthing v2.x 走 `proxy.FromEnvironment()`，**只认 `ALL_PROXY` / `all_proxy`**、
@@ -599,12 +627,12 @@ A: **按 MAC 找 IP，别按 IP 找机器。** MAC 是网卡出厂地址，不�
 仓库里的 `lan-find.sh` 就干这一件事：并发 ping 填满内核 ARP 表，再按 MAC 匹配 —— 一个 /24 网段 **1-5 秒**扫完。
 
 ```bash
-./lan-find.sh aa:bb:cc:dd:ee:ff              # → 192.168.1.42
-./lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # 指定网段
-./lan-find.sh --list                          # 列出所有在线设备
+./scripts/lan-find.sh aa:bb:cc:dd:ee:ff              # → 192.168.1.42
+./scripts/lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # 指定网段
+./scripts/lan-find.sh --list                          # 列出所有在线设备
 ```
 
-**用法**：唤醒脚本里别写死 IP，先 `IP=$(./lan-find.sh <MAC>)` 再 `ssh $USER@$IP`。
+**用法**：唤醒脚本里别写死 IP，先 `IP=$(./scripts/lan-find.sh <MAC>)` 再 `ssh $USER@$IP`。
 
 **为什么不用主机名**：Windows 的 NetBIOS / mDNS 在内网不一定开，跨网段更不可靠；ARP 表是内核自己维护的，最实在。
 
@@ -616,9 +644,9 @@ A: **按 MAC 找 IP，别按 IP 找机器。** MAC 是网卡出厂地址，不�
 这种情况改成「探 22 端口 + 比对 hostname」：
 
 ```bash
-./host-find.sh <hostname>                       # 默认扫 192.168.0 / 192.168.1 / 10.0.0
-./host-find.sh <hostname> <ssh-user>            # 指定 SSH 用户
-./host-find.sh <hostname> <ssh-user> 192.168.0  # 指定网段
+./scripts/host-find.sh <hostname>                       # 默认扫 192.168.0 / 192.168.1 / 10.0.0
+./scripts/host-find.sh <hostname> <ssh-user>            # 指定 SSH 用户
+./scripts/host-find.sh <hostname> <ssh-user> 192.168.0  # 指定网段
 ```
 
 **代价**：比 ARP 慢（一个 /24 约 2-11 秒），因为要对每个开着 22 的地址跑一次 `ssh ... hostname`。
@@ -657,7 +685,7 @@ A: **照防火墙的思路分三个信任域（TRUST / DMZ / UNTRUST），域内
 | **UNTRUST**（不信任区，只发不收） | `acp-shared-<对端>` | 只给对端看的材料 | 内部 + 该对端 | 内部 `sendonly`，对端 `receiveonly` |
 | **对外收信口** | `acp-mail-<对端>` | `outbox/`（信件 JSON）、`peers/`（名片）、`state/`（init 建的空目录，代码不读写；真正缓存在本机 `<home>/state/`）、`.stignore`；**不放任何内部文件** | 内部 + 该对端 | 双方 `sendreceive` |
 
-**为什么单独要一个 `acp-mail-<对端>`：** `acp.py send` 要求发送方能往共享 `outbox` 写文件。
+**为什么单独要一个 `acp-mail-<对端>`：** `scripts/acp.py send` 要求发送方能往共享 `outbox` 写文件。
 外部若只能读（`receiveonly`），它就**发不出信**——「外部投稿走 ACP」根本落不了地。
 所以**收信口必须可写**，但把它收窄到「只含运行设施的一个 folder」：`outbox/`（信件 JSON）、`peers/`（名片）、`state/`（`init` 建的空目录，代码不读写；真正缓存在本机 `<home>/state/`）、`.stignore`，里面不放任何内部文件。注意外部能写的面包括 `peers/` 名片——别把这个 folder 和内部邮局混用。
 
@@ -718,7 +746,7 @@ GrokBot 的虚机闲置时会被**平台回收/休眠**，Syncthing 进程随之
 **⇒ 设计协作必须考虑这一点：给云端 agent 派活要「人工触发」，不能假定它一直在线。**
 **这也是我们把它定位成「人工触发、自动处理」的原因之一。**
 
-**完整记录：** → **[云端 Agent 接入 ACP-lite 案例：mango@GrokBot 跨公网首接](云端Agent接入案例-mango-20261019.md)**
+**完整记录：** → **[云端 Agent 接入 ACP-lite 案例：mango@GrokBot 跨公网首接](docs/zh/云端Agent接入案例-mango-20261019.md)**
 
 ### 案例二：muse-cloud（Meta Muse）（Q17）
 
@@ -748,7 +776,7 @@ Muse 那边每个连接、每个 folder 都要人工点确认，不像 GrokBot �
 **⑤ 代理不是障碍**
 对端只能走代理出网，连不上直连端口 —— 但 **relay 模式本来就不走直连**，这个担心是多余的。
 
-**完整记录：** → **[云端 Agent 接入联调实践：muse-cloud](云端Agent接入案例-muse-cloud-20261021.md)**
+**完整记录：** → **[云端 Agent 接入联调实践：muse-cloud](docs/zh/云端Agent接入案例-muse-cloud-20261021.md)**
 
 ### 和 DeepSeek super agent 这类 GitHub autonomous agent 有什么不一样（Q18）
 
@@ -824,10 +852,10 @@ GitHub agent      借地 —— 地和地上盖的房子都是别人的
 还是默认的 `infer`，`send` 会**直接报「语义矛盾」拒绝**（`infer` 只用于理解与回应，不可能去付款 / 发送 / 删除）。
 
 ```bash
-python acp.py ... userkey                 # 建 L2 人密钥（口令加密，只存本机，只你有口令）
-python acp.py ... approve <msg_id>        # 人工放行：需要输入口令
-python acp.py ... stop                    # 刹车：一切出口动作立即停止（收信不受影响）
-python acp.py ... stop --off              # 解除
+python scripts/acp.py ... userkey                 # 建 L2 人密钥（口令加密，只存本机，只你有口令）
+python scripts/acp.py ... approve <msg_id>        # 人工放行：需要输入口令
+python scripts/acp.py ... stop                    # 刹车：一切出口动作立即停止（收信不受影响）
+python scripts/acp.py ... stop --off              # 解除
 ```
 
 - **agent 拿不到口令 ⇒ 无法自签放行票**：这是"被注入的 agent 不能自己给自己批条子"的落地方式。
@@ -856,7 +884,7 @@ python acp.py ... stop --off              # 解除
 > `hops` 防的是**无限回环**，不是"多轮往返"：默认 `max_hops=4` 即允许 4 轮来回；
 > 要严格"只回一封"就加 `--max-hops 1`。**单条坏消息不连坐同轮其它消息**（标 `rejected/malformed` 后跳过）。
 
-字段级规范见 `ENVELOPE-FORMAT.md`。**手写的信封一律没有签名 → 一定被拒收**，别手写，用 `send`。
+字段级规范见 `docs/zh/信封格式.md`。**手写的信封一律没有签名 → 一定被拒收**，别手写，用 `send`。
 
 ### D. 定位：和 MCP / A2A / 消息中间件的横向对比
 
@@ -875,10 +903,10 @@ python acp.py ... stop --off              # 解除
 ### E. 网络档位与省 token 账本
 
 ```bash
-python acp_net.py --syncthing-home <syncthing-home> status      # 看档位 + 实际走哪条路
-python acp_net.py --syncthing-home <syncthing-home> mode auto   # 默认档（旧叫法 wan）
-python acp_net.py --syncthing-home <syncthing-home> mode strict # 严格档（旧叫法 lan）
-python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻重连
+python scripts/acp_net.py --syncthing-home <syncthing-home> status      # 看档位 + 实际走哪条路
+python scripts/acp_net.py --syncthing-home <syncthing-home> mode auto   # 默认档（旧叫法 wan）
+python scripts/acp_net.py --syncthing-home <syncthing-home> mode strict # 严格档（旧叫法 lan）
+python scripts/acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻重连
 # <syncthing-home> = Syncthing 配置目录（含 config.xml）：
 #   Windows 例 %USERPROFILE%\acp-home\syncthing ｜ Linux/macOS 例 ~/.config/syncthing
 ```
@@ -900,7 +928,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
 | **`peers/` 谁都能写** | 名片在共享目录里，任何同步方都能覆盖它（低危）。将来可上 TOFU（首见锁定指纹，变了告警） |
 | **`config.xml` 里有设备 ≠ 对方在线** | 判"通不通"要看实际证据：**收到过对方的信** > 对端 completion > 配置条目 |
 | **别在生产用 `ACP_USERKEY_PASSPHRASE`** | 那是给自测用的环境变量；生产请用交互式口令输入，避免口令被子进程继承 |
-| **审计 / 自测** | `acp.py audit` 校验哈希链；`python selftest.py` 用两个临时"机器"跑完整套流程（**项数以程序输出为准**） |
+| **审计 / 自测** | `scripts/acp.py audit` 校验哈希链；`python scripts/selftest.py` 用两个临时"机器"跑完整套流程（**项数以程序输出为准**） |
 
 ### G. 依赖与归属声明
 
@@ -909,7 +937,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # 换网后立刻
   Syncthing Foundation 与社区共同维护）。**同步层不是我们写的，我们不主张任何原创性** ——
   谨向 Syncthing 项目及其维护者致谢。我们加的只是一层**签名信封 + 哈希链审计**的薄脚本。
 - **运行依赖**：Python 3.9+、`cryptography`、Syncthing（要跨机唤醒再加 OpenSSH，见第六步）。
-- 本项目以 **MIT** 发布（见 `LICENSE`）；归属声明：**中文见本节上文**，英文见 [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md)。
+- 本项目以 **MIT** 发布（见 `LICENSE`）；归属声明：**中文见本节上文**，英文见 [`docs/en/ATTRIBUTION.md`](docs/en/ATTRIBUTION.md)。
 
 ### H. 边界与免责（诚实说明）
 

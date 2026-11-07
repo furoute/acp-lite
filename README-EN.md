@@ -31,9 +31,37 @@ first (how to connect, how to log in, which pitfalls we hit); for "why is it des
 **"2. Appendices"** -- skip them entirely if you just want to use it.
 Placeholders: `<home-dir>` this host's **private** directory | `<shared-dir>` the directory the two machines
 **sync** | `<agent>` / `<peer-agent>` agent names.
-Program version = protocol version = **0.7.1**; the envelope format is defined by `ENVELOPE-FORMAT.md`.
+Program version = protocol version = **0.7.1**; the envelope format is defined by `docs/zh/信封格式.md`.
 
 ---
+
+## Repository layout
+
+```
+acp-lite/
+├── scripts/      protocol implementation and tools
+│   ├── acp.py            main CLI: identity, delivery, tickets, audit (single file, no deps)
+│   ├── selftest.py       end-to-end self test (two simulated hosts, 81 cases)
+│   ├── acp_net.py        network mode switch (LAN direct / relay)
+│   ├── acp_mail.py       mailbox transport (an email account as the room)
+│   ├── acp_probe.py      link probe: timeline of automatic path switching
+│   ├── acp_latency.py    cross-host latency (reads peer's missing bytes, not ICMP)
+│   ├── acp-deviceid.py   print Syncthing device IDs
+│   ├── lan-find.sh       find IP by MAC
+│   ├── host-find.sh      find IP by hostname (cross-subnet, MAC-randomisation proof)
+│   ├── synctest.py       large-file sync speed test
+│   └── push-acp.cmd      quiet git push wrapper for Windows
+├── docs/
+│   ├── CHANGELOG.md      change log
+│   ├── zh/               Chinese: deployment guide, envelope format, onboarding cases
+│   └── en/               English: onboarding cases, attribution
+├── assets/       topology diagrams (zh/en, SVG + PNG)
+├── llms.txt      project summary for LLMs
+└── README.md / README-EN.md
+```
+
+All commands run from the **repository root**; script paths are written `scripts/xxx`.
+e.g. `python scripts/acp.py --home <home> --root <shared> status`
 
 ## Step 1: Python dependencies (once on each machine)
 
@@ -48,7 +76,7 @@ iron rule 5) -- so treat it as **required**.
 
 ```powershell
 winget install Syncthing.Syncthing          # Windows; on Linux/macOS use your package manager or the official download
-python acp-deviceid.py --config <syncthing-home>/config.xml   # print this host's Device ID (does not need the Syncthing executable)
+python scripts/acp-deviceid.py --config <syncthing-home>/config.xml   # print this host's Device ID (does not need the Syncthing executable)
 ```
 
 `<syncthing-home>` = Syncthing's config directory (the one holding `config.xml`): on Windows e.g.
@@ -70,13 +98,13 @@ The essentials (just follow them):
 ```bash
 # Create the identity. --home is this host's private directory (it holds the private key and must NEVER go
 # into the synced directory); --root is the directory Syncthing syncs
-python acp.py --home <home-dir> --root <shared-dir> init --agent <agent> --display "Codex@desktop"
+python scripts/acp.py --home <home-dir> --root <shared-dir> init --agent <agent> --display "Codex@desktop"
 
 # Print this host's fingerprint
-python acp.py --home <home-dir> --root <shared-dir> status
+python scripts/acp.py --home <home-dir> --root <shared-dir> status
 
 # Verify the peer's fingerprint out-of-band (in person / by voice -- never over the network), then trust it
-python acp.py --home <home-dir> --root <shared-dir> trust --agent <peer-agent> --fingerprint xxxx-xxxx-xxxx-xxxx
+python scripts/acp.py --home <home-dir> --root <shared-dir> trust --agent <peer-agent> --fingerprint xxxx-xxxx-xxxx-xxxx
 ```
 
 Replace the placeholders per platform: on Windows, e.g. `--home %USERPROFILE%\acp-home --root %USERPROFILE%\acp-shared`;
@@ -103,10 +131,10 @@ Three rules you must keep:
 ## Step 4: Send and receive (get this path working first)
 
 ```bash
-python acp.py --home <home-dir> --root <shared-dir> send --to <peer-agent> --text "first test message" --reply answer
-python acp.py --home <home-dir> --root <shared-dir> inbox      # on the peer
-python acp.py --home <home-dir> --root <shared-dir> digest     # see everything pending in one screen (the token-saving way to receive)
-python acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
+python scripts/acp.py --home <home-dir> --root <shared-dir> send --to <peer-agent> --text "first test message" --reply answer
+python scripts/acp.py --home <home-dir> --root <shared-dir> inbox      # on the peer
+python scripts/acp.py --home <home-dir> --root <shared-dir> digest     # see everything pending in one screen (the token-saving way to receive)
+python scripts/acp.py --home <home-dir> --root <shared-dir> ack <msg_id>
 ```
 
 **The criterion**: your own message really shows up in `<shared-dir>/outbox/<self>/` and the peer's reply shows up in `<shared-dir>/outbox/<peer>/`; do not judge by the exit code alone.
@@ -115,23 +143,23 @@ Command cheat sheet (every command takes `--home <home-dir> --root <shared-dir>`
 
 | Command | What it does |
 |---|---|
-| `acp.py ... status` | identity / trust / inbox / brake status; prints this host's fingerprint |
-| `acp.py ... send --to <peer-agent> --text "..."` | deliver one message; `--to '*'` = broadcast; `--reply none` = no reply needed (default `auto`) |
-| `acp.py ... send --reply-to <msg_id> ...` | reply (auto `hops+1`) |
-| `acp.py ... inbox` | list the inbox (add `--all` to include non-ok states) |
-| `acp.py ... ready` | list only what is **genuinely executable** (subject to STOP and release tickets) |
-| `acp.py ... send`'s `--reply` | `none` / `ack` / `answer` -- **just a token-saving envelope label** (the receiver can filter without reading the body); **it does not send a receipt by itself** -- a receipt still has to be sent by the other side |
-| `acp.py ... digest` | condense the pending messages into one screen -- **the token-saving way to receive** (shows the last **30** by default; `--limit` adjusts it) |
-| `acp.py ... ack <msg_id>` | confirm it is handled = **close the case**: delivery state becomes `done`, **the release ticket is voided**, and it disappears from `digest`; **only valid for the `ok` state** -- `untrusted` / `expired` and friends are all refused |
-| `acp.py ... watch --loop --interval 3` | resident delivery (moves files only, never calls a model; idling burns no tokens); it records the messages it has seen in `<home>/state/seen.json` |
-| `acp.py ... audit` | verify and inspect the hash-chained audit log |
-| `python selftest.py` | run the entire offline self-test (gate / brake / forged release ticket / bad-message isolation); no network needed |
-| `python acp_net.py --syncthing-home <syncthing-home> status` | show the network mode + whether the path used is direct or a relay |
+| `scripts/acp.py ... status` | identity / trust / inbox / brake status; prints this host's fingerprint |
+| `scripts/acp.py ... send --to <peer-agent> --text "..."` | deliver one message; `--to '*'` = broadcast; `--reply none` = no reply needed (default `auto`) |
+| `scripts/acp.py ... send --reply-to <msg_id> ...` | reply (auto `hops+1`) |
+| `scripts/acp.py ... inbox` | list the inbox (add `--all` to include non-ok states) |
+| `scripts/acp.py ... ready` | list only what is **genuinely executable** (subject to STOP and release tickets) |
+| `scripts/acp.py ... send`'s `--reply` | `none` / `ack` / `answer` -- **just a token-saving envelope label** (the receiver can filter without reading the body); **it does not send a receipt by itself** -- a receipt still has to be sent by the other side |
+| `scripts/acp.py ... digest` | condense the pending messages into one screen -- **the token-saving way to receive** (shows the last **30** by default; `--limit` adjusts it) |
+| `scripts/acp.py ... ack <msg_id>` | confirm it is handled = **close the case**: delivery state becomes `done`, **the release ticket is voided**, and it disappears from `digest`; **only valid for the `ok` state** -- `untrusted` / `expired` and friends are all refused |
+| `scripts/acp.py ... watch --loop --interval 3` | resident delivery (moves files only, never calls a model; idling burns no tokens); it records the messages it has seen in `<home>/state/seen.json` |
+| `scripts/acp.py ... audit` | verify and inspect the hash-chained audit log |
+| `python scripts/selftest.py` | run the entire offline self-test (gate / brake / forged release ticket / bad-message isolation); no network needed |
+| `python scripts/acp_net.py --syncthing-home <syncthing-home> status` | show the network mode + whether the path used is direct or a relay |
 
 ## Step 5: Resident delivery (idling costs zero tokens)
 
 ```bash
-python acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
+python scripts/acp.py --home <home-dir> --root <shared-dir> watch --loop --interval 3
 ```
 
 - **Autostart**: on Windows, Task Scheduler (triggered at logon); on Linux, `systemd --user` (or `crontab @reboot`); on macOS, `launchd`.
@@ -186,7 +214,7 @@ New-NetFirewallRule -Name OpenSSH-Server-In-TCP-LAN -DisplayName 'OpenSSH Server
 sudo apt install openssh-server        # macOS ships OpenSSH
 ```
 
-Before waking anything, run `python acp.py --home <acp-home> --root <shared-dir> ready`; **if `STOP` exists, do not wake** -- the brake outranks the task.
+Before waking anything, run `python scripts/acp.py --home <acp-home> --root <shared-dir> ready`; **if `STOP` exists, do not wake** -- the brake outranks the task.
 
 Wake-up commands (the prompt goes **through a file + stdin**, so neither Chinese text nor special characters get mangled by the shell):
 
@@ -289,7 +317,7 @@ A wake-up carries only a "**pointer**" (the absolute path of the received letter
 **Acceptance: all three must hold, and the exit code is not one of them.**
 
 1. **Artifact on disk**: `dir <artifact>` lists a file, size > 0, timestamp later than this wake-up.
-2. **Audit chain grows**: `python acp.py --home <acp-home> --root <shared-dir> audit` gains one entry, and the newest hash matches.
+2. **Audit chain grows**: `python scripts/acp.py --home <acp-home> --root <shared-dir> audit` gains one entry, and the newest hash matches.
 3. **Signed receipt**: the woken agent's reply appears under `outbox/<woken-agent>/` (the peer's outbox, visible to you after sync) and `verify` passes.
 
 `exit 0` may merely mean "it said something": no artifact, no ledger entry, no reply = it did not do the work.
@@ -409,13 +437,13 @@ git pull                       # inside the repo directory
 # or: download the new acp.py / selftest.py and overwrite the old ones
 
 # self-check before going on
-python selftest.py             # should be all green; if anything is red, stop
-python acp.py --home <home-dir> --root <shared-dir> status   # the old identity must still be there
+python scripts/selftest.py             # should be all green; if anything is red, stop
+python scripts/acp.py --home <home-dir> --root <shared-dir> status   # the old identity must still be there
 ```
 
 **An upgrade succeeded if, and only if, these three hold:**
 
-1. `python acp.py ... status` prints the **same** agent name / fingerprint as before the upgrade
+1. `python scripts/acp.py ... status` prints the **same** agent name / fingerprint as before the upgrade
 2. old messages in `<shared-dir>` can still be read with `inbox` / `digest`
 3. a test message to a peer shows up on their `watch`
 
@@ -525,7 +553,7 @@ ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519 -N ""
 type %USERPROFILE%\.ssh\id_ed25519.pub | ssh <peer-username>@<peer-LAN-IP> "cat >> .ssh/authorized_keys"
 ```
 
-- **Do not mix up the two kinds of identity**: Syncthing's Device ID is **per machine** (one per host; `python acp-deviceid.py` computes it), while an ACP agent fingerprint is **per identity** (one per agent).
+- **Do not mix up the two kinds of identity**: Syncthing's Device ID is **per machine** (one per host; `python scripts/acp-deviceid.py` computes it), while an ACP agent fingerprint is **per identity** (one per agent).
 - Once you are logged in and want to **wake a particular machine**, the command is in **step 6**; SSH only "knocks on the door" -- the ledger still belongs to ACP.
 - Two known inconsistencies, do not trip over them: **receiving** only needs the firewall to let port 22 through **and** the peer's `sshd` to be running (`Get-Service sshd`);
   **waking up** additionally needs the target directories to be **writable** -- a successful device pairing does not mean wake-up can do work.
@@ -537,7 +565,7 @@ The cost: a foreground SSH connection **dies with the session**, so long jobs ha
 
 ### Pitfalls (Q5 → Q13)
 
-**Q5: Can `acp.py --root` be omitted?**
+**Q5: Can `scripts/acp.py --root` be omitted?**
 A: **No.** When omitted it defaults to `<home>/shared` (not the shared group directory), with **exit code 0 and no error at all** -- but the letter lands in
 this host's private directory and nobody in the group ever sees it. Always write `--root <shared-dir>` explicitly when sending or replying; the criterion is that your own message shows up in `outbox/<self>/` and the peer's reply shows up in `outbox/<peer>/`.
 **`--home` has a default too** (`~/.acp-personal`), and the two defaults together are the worst trap -- omit `--home` and `--root` follows it down to
@@ -589,7 +617,7 @@ is "taking over an existing session": while the Codex desktop client holds the w
 A: LAN discovery is being blocked -- check **TUN / proxy** first. The criterion is the "connection type" in the Syncthing
 UI: **TCP LAN = direct**, **relay = the normal state across networks**, **relay while on the same Wi-Fi = abnormal**.
 After a network change, don't sit and wait for slowness -- measured, waiting passively takes about **4 min 50 s**, while an
-active `python acp_net.py --syncthing-home <syncthing-home> kick` takes about **2 s**.
+active `python scripts/acp_net.py --syncthing-home <syncthing-home> kick` takes about **2 s**.
 
 **Q12: All the Syncthing settings on Windows are correct, and it still never connects?**
 A: Nine times out of ten it is **`ALL_PROXY`**. Syncthing v2.x goes through `proxy.FromEnvironment()`, **and recognizes
@@ -633,12 +661,12 @@ A: **Find the IP by MAC, not the machine by IP.** A MAC address is burned into t
 `lan-find.sh` in this repo does exactly that: concurrency-ping the subnet to populate the kernel ARP table, then match on MAC -- a /24 takes **1-5 seconds**.
 
 ```bash
-./lan-find.sh aa:bb:cc:dd:ee:ff              # -> 192.168.1.42
-./lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # explicit subnet
-./lan-find.sh --list                          # list all online hosts
+./scripts/lan-find.sh aa:bb:cc:dd:ee:ff              # -> 192.168.1.42
+./scripts/lan-find.sh aa:bb:cc:dd:ee:ff 192.168.0    # explicit subnet
+./scripts/lan-find.sh --list                          # list all online hosts
 ```
 
-**How to use it**: never hard-code the IP in a wake-up script. Resolve it first -- `IP=$(./lan-find.sh <MAC>)` -- then `ssh $USER@$IP`.
+**How to use it**: never hard-code the IP in a wake-up script. Resolve it first -- `IP=$(./scripts/lan-find.sh <MAC>)` -- then `ssh $USER@$IP`.
 
 **Why not hostname**: Windows NetBIOS / mDNS is not guaranteed to be on, and is far less reliable across subnets. The ARP table is maintained by the kernel; it is the most down-to-earth option.
 
@@ -676,7 +704,7 @@ On 2026-11-01 this was settled as a three-zone model: **write freely inside the 
 | **UNTRUST** (read-only hand-out) | `acp-shared-<peer>` | material the peer may read | internal + that peer | internal `sendonly`, peer `receiveonly` |
 | **Inbound mail port** | `acp-mail-<peer>` | `outbox/` (message JSON), `peers/` (name cards), `state/` (an empty dir created by `init`, the code never reads or writes it; the real cache lives in the local `<home>/state/`), `.stignore` -- **no internal files** | internal + that peer | both sides `sendreceive` |
 
-**Why a separate `acp-mail-<peer>` is unavoidable:** `acp.py send` requires the sender to *write* into a shared `outbox`.
+**Why a separate `acp-mail-<peer>` is unavoidable:** `scripts/acp.py send` requires the sender to *write* into a shared `outbox`.
 If the peer can only read (`receiveonly`), it **cannot send anything**, and "external peers submit over ACP" is unimplementable.
 So the inbound port **must be writable** -- but narrow it to one folder holding runtime facilities only. Note that the peer can write `peers/` name cards too, so never reuse this folder as an internal mailbox.
 
@@ -737,7 +765,7 @@ fix:      wake the VM and wait for it to reconnect (within minutes)
 **=> Collaboration design must account for this: work dispatched to a cloud agent has to be "human-triggered"; never assume it is always online.**
 **This is one of the reasons we define it as "human-triggered, automatic processing".**
 
-**Full record:** → **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](CLOUD-AGENT-ONBOARDING-mango-20261019.md)**
+**Full record:** → **[Connecting a cloud agent to ACP-lite: mango@GrokBot, first cross-internet onboarding](docs/en/cloud-agent-onboarding-mango-20261019.md)**
 
 ### Case two: muse-cloud (Meta Muse) (Q17)
 
@@ -767,7 +795,7 @@ While the peer is offline, `connected=false` and `need` stays at 0; it reconnect
 **5. The proxy is not an obstacle**
 The peer can only reach the internet through a proxy and cannot connect to direct ports — but **relay mode never uses direct connections**, so the worry was unfounded.
 
-**Full record:** → **[Connecting and joint-debugging a cloud agent: muse-cloud](CLOUD-AGENT-ONBOARDING-muse-cloud-20261021.md)**
+**Full record:** → **[Connecting and joint-debugging a cloud agent: muse-cloud](docs/en/cloud-agent-onboarding-muse-cloud-20261021.md)**
 
 ### How is this different from a GitHub-based autonomous agent (Q18)
 
@@ -847,10 +875,10 @@ two real tasks): see `docs/DSH-Superagent-Ubuntu部署与实测-20261107.md` in 
 (`infer` is only for understanding and answering -- it cannot pay / send / delete).
 
 ```bash
-python acp.py ... userkey                 # create the L2 human key (passphrase-encrypted, host-local, only you know the passphrase)
-python acp.py ... approve <msg_id>        # human release: prompts for the passphrase
-python acp.py ... stop                    # brake: every outbound action stops at once (receiving is unaffected)
-python acp.py ... stop --off              # release the brake
+python scripts/acp.py ... userkey                 # create the L2 human key (passphrase-encrypted, host-local, only you know the passphrase)
+python scripts/acp.py ... approve <msg_id>        # human release: prompts for the passphrase
+python scripts/acp.py ... stop                    # brake: every outbound action stops at once (receiving is unaffected)
+python scripts/acp.py ... stop --off              # release the brake
 ```
 
 - **The agent cannot obtain the passphrase ⇒ it cannot sign its own release ticket.** This is how "an injected agent must not issue itself a permission slip" is grounded.
@@ -878,7 +906,7 @@ So "point-to-point" in this project means **addressed but not encrypted**. Do no
 > `hops` guards against **endless loops**, not against "multi-round exchanges": the default `max_hops=4` allows 4 round trips; for a strict "reply only once", add `--max-hops 1`.
 > **One bad message does not take down the others in the same round** (it is marked `rejected/malformed` and skipped).
 
-The field-level specification is in `ENVELOPE-FORMAT.md`. **A hand-written envelope has no signature → it is always rejected**; don't hand-write, use `send`.
+The field-level specification is in `docs/zh/信封格式.md`. **A hand-written envelope has no signature → it is always rejected**; don't hand-write, use `send`.
 
 ### D. Positioning: compared with MCP / A2A / message middleware
 
@@ -897,10 +925,10 @@ The field-level specification is in `ENVELOPE-FORMAT.md`. **A hand-written envel
 ### E. Network mode and the token-saving ledger
 
 ```bash
-python acp_net.py --syncthing-home <syncthing-home> status      # show the mode + which path is actually used
-python acp_net.py --syncthing-home <syncthing-home> mode auto   # default mode (formerly called wan)
-python acp_net.py --syncthing-home <syncthing-home> mode strict # strict mode (formerly called lan)
-python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immediately after a network change
+python scripts/acp_net.py --syncthing-home <syncthing-home> status      # show the mode + which path is actually used
+python scripts/acp_net.py --syncthing-home <syncthing-home> mode auto   # default mode (formerly called wan)
+python scripts/acp_net.py --syncthing-home <syncthing-home> mode strict # strict mode (formerly called lan)
+python scripts/acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immediately after a network change
 # <syncthing-home> = Syncthing's config directory (contains config.xml):
 #   Windows example: %USERPROFILE%\acp-home\syncthing | Linux/macOS example: ~/.config/syncthing
 ```
@@ -921,7 +949,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immed
 | **Anyone can write `peers/`** | name cards live in the shared directory and any syncing party can overwrite them (low risk). TOFU (trust-on-first-use: lock the fingerprint on first sight, warn when it changes) is a possible future step |
 | **A device in `config.xml` ≠ the peer is online** | to judge "are we connected", look for real evidence: **receiving a letter from the peer** > the peer's completion > a config entry |
 | **Don't use `ACP_USERKEY_PASSPHRASE` in production** | that environment variable is for self-tests; in production use interactive passphrase entry so the passphrase is not inherited by child processes |
-| **Audit / self-test** | `acp.py audit` verifies the hash chain; `python selftest.py` runs the whole flow using two temporary "machines" (**the item count is whatever the program prints**) |
+| **Audit / self-test** | `scripts/acp.py audit` verifies the hash chain; `python scripts/selftest.py` runs the whole flow using two temporary "machines" (**the item count is whatever the program prints**) |
 
 ### G. Dependencies and attribution
 
@@ -930,7 +958,7 @@ python acp_net.py --syncthing-home <syncthing-home> kick       # reconnect immed
   Swedish non-profit Syncthing Foundation together with the community). **We did not write the sync layer and we claim no originality
   over it** -- our thanks go to the Syncthing project and its maintainers. All we added is a thin layer of **signed envelopes + hash-chained audit**.
 - **Runtime dependencies**: Python 3.9+, `cryptography`, Syncthing (plus OpenSSH if you want cross-host wake-ups, see step 6).
-- This project is released under **MIT** (see `LICENSE`); attribution notice: **the Chinese notice is above**, the English one is in [`ATTRIBUTION-EN.md`](ATTRIBUTION-EN.md).
+- This project is released under **MIT** (see `LICENSE`); attribution notice: **the Chinese notice is above**, the English one is in [`docs/en/ATTRIBUTION.md`](docs/en/ATTRIBUTION.md).
 
 ### H. Boundaries and disclaimers (stated honestly)
 
