@@ -612,6 +612,21 @@ A: **按 MAC 找 IP，别按 IP 找机器。** MAC 是网卡出厂地址，不�
 
 **平台限制**：`lan-find.sh` 读 `/proc/net/arp`，是 Linux/macOS 侧用的。Windows 侧等价命令是 `arp -a`（同样先 ping 一轮再读）。
 
+**按主机名找（`host-find.sh`）**：MAC 也可能造假 —— 手机开热点、Wi-Fi 随机化就会导致 MAC 每次变。
+这种情况改成「探 22 端口 + 比对 hostname」：
+
+```bash
+./host-find.sh <hostname>                       # 默认扫 192.168.0 / 192.168.1 / 10.0.0
+./host-find.sh <hostname> <ssh-user>            # 指定 SSH 用户
+./host-find.sh <hostname> <ssh-user> 192.168.0  # 指定网段
+```
+
+**代价**：比 ARP 慢（一个 /24 约 2-11 秒），因为要对每个开着 22 的地址跑一次 `ssh ... hostname`。
+**换来的**：跨网段也能用，且不怕 MAC 随机化。
+
+两个脚本的分工：**知道 MAC 就用 `lan-find.sh`（快），只知道 hostname 就用 `host-find.sh`（慢但通用）。**
+
+
 ### 接云端 Personal Agent（Q14）
 
 **Q14: 云端 personal agent 能接吗？**
