@@ -769,6 +769,58 @@ The peer can only reach the internet through a proxy and cannot connect to direc
 
 **Full record:** → **[Connecting and joint-debugging a cloud agent: muse-cloud](CLOUD-AGENT-ONBOARDING-muse-cloud-20261021.md)**
 
+### How is this different from a GitHub-based autonomous agent (Q18)
+
+**Q18: Many agents now work through GitHub -- for example DeepSeek's own super agent prototype.
+Is ACP-Lite the same thing?**
+
+A: **They look alike; underneath they are opposites.**
+
+**Where they are alike** -- both borrow an external infrastructure as the transport layer,
+neither builds its own server:
+
+```
+Agent on GitHub     borrows issues / PRs / notifications as the workflow
+ACP-Lite            borrows Syncthing as transport (P2P sync + relay fallback)
+```
+
+That much is the same: no self-built NAT traversal, no self-built code hosting.
+
+**They differ in three places, and every one of them is inverted:**
+
+| | ACP-Lite | A GitHub-based autonomous agent |
+|---|---|---|
+| **Identity** | Self-made: `cert.pem` + `key.pem` + Device ID | Someone else's: a GitHub user account; banning it deletes the identity |
+| **Where the data lives** | On your own machines, merely passing through a relay (TLS; the relay sees ciphertext) | Issues, PRs and code live on the platform's servers |
+| **Who can stop it** | You can stop, edit or migrate it (change one address when the relay drifts) | You accept the platform's rules; APIs, billing and terms can change at will |
+
+**In one line:**
+
+```
+ACP-Lite              borrows the road -- the road is theirs, the car is yours
+Agent on GitHub       borrows the land -- the land and the house on it are theirs
+```
+
+**ACP-Lite was built around sovereignty**: messages do not pass through a third party,
+files are not handed to anyone else, identity stays in your hands.
+Using a platform-hosted agent means giving that up on purpose --
+in exchange for not having to run code hosting, CI or a collaboration UI yourself.
+
+**So draw the boundary around what may leave your house, not around which tool you use.**
+Same idea as the three-zone model in Q15:
+
+```
+Public repositories (already published anyway)   let the platform agent change them
+Private projects / anything with secrets         do not
+```
+
+**One thing the platform agent does better**: it is event-driven and autonomous.
+Nobody has to watch it -- post an issue and it opens a branch, edits files and raises a PR.
+The price is being tied to the platform, and being autonomous only within the rules it allows.
+
+**Full test record** (Ubuntu deployment, dedicated GitHub account, configuration and rules,
+two real tasks): see `docs/DSH-Superagent-Ubuntu部署与实测-20261107.md` in `furoute/dsh`.
+
 ---
 
 ## 2. Appendices (for people: why it is designed this way; skip them if you just want to use it)

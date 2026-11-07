@@ -735,7 +735,7 @@ Muse 那边每个连接、每个 folder 都要人工点确认，不像 GrokBot �
 
 **完整记录：** → **[云端 Agent 接入联调实践：muse-cloud](云端Agent接入案例-muse-cloud-20261021.md)**
 
-### 和 GitHub 上的 autonomous agent 有什么不一样（Q18）
+### 和 DeepSeek super agent 这类 GitHub autonomous agent 有什么不一样（Q18）
 
 **Q18: 现在很多 agent 都是接 GitHub 干活的（比如 DeepSeek 官方那个 super agent 原型），
 那跟 ACP-Lite 是不是一回事？**
