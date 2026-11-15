@@ -493,7 +493,7 @@ x  re-run init against a different --home path
 
 ---
 
-## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 10 pitfalls + 4 onboarding designs, 20 questions in total)
+## 1. Common questions (FAQ: 2 definitions + 4 how-to-connect + 10 pitfalls + 4 onboarding designs + 1 super-agent comparison, 21 questions in total)
 
 ⚠️ **The boundary first**: every answer below comes from **this one particular setup of ours** --
 **an Ubuntu netbook + a Win11 desktop + Syncthing + Clash (on the Windows side)**, with the agents

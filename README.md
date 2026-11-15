@@ -466,7 +466,7 @@ python scripts/acp.py --home <home-dir> --root <shared-dir> status   # 旧身份
 
 ---
 
-## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 10 条踩坑 + 4 条接入方案，共 20 问）
+## 一、常见问题（FAQ：2 条定义 + 4 条怎么连 + 10 条踩坑 + 4 条接入方案 + 1 条 super agent 对比，共 21 问）
 
 ⚠️ **先说边界**：下面每一条都来自**我们这一套特定环境** ——
 **Ubuntu 上网本 + Win11 台式机 + Syncthing + Clash（Windows 侧）**，agent 是 `codex-desktop` / `dsh-desktop` /
